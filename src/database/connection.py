@@ -1,24 +1,38 @@
-import os
-from dotenv import load_dotenv
+"""Configuração de conexão com o banco de dados.
+
+Módulo responsável por inicializar a conexão SQLAlchemy
+e gerenciar as sessões do banco de dados.
+"""
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from src.config import settings
 
-load_dotenv()
+# Criar engine de conexão
+engine = create_engine(
+    settings.database_url,
+    echo=False,  # Mudar para True em desenvolvimento se necessário
+)
 
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "appdb")
-
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-engine = create_engine(DATABASE_URL)
-
+# Factory para criar sessões
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine
+    bind=engine,
 )
 
+# Base para modelos ORM
 Base = declarative_base()
+
+
+def get_database_session():
+    """Obter sessão do banco de dados.
+
+    Yields:
+        SessionLocal: Sessão ativa do banco de dados.
+    """
+    database = SessionLocal()
+    try:
+        yield database
+    finally:
+        database.close()
