@@ -66,96 +66,40 @@ docker-compose down -v
 Modelo de estrutura sugerida para a aplicação:
 - Exemplo de arquitetura
 ```
-app/
-│
-├── main.py
-│
-├── core/                     # Configurações globais
-│   ├── config.py
-│   ├── security.py
-│   ├── database.py
-│   ├── dependencies.py
-│   ├── exceptions.py
-│   └── logging.py
-│
-├── api/                      # Camada HTTP
-│   ├── v1/
-│   │   ├── routers/
-│   │   │   ├── auth.py
-│   │   │   ├── users.py
-│   │   │   └── chats.py
-│   │   │
-│   │   └── api.py
-│   │
-│   └── middleware/
-│       ├── auth.py
-│       └── tenant.py
-│
-├── domain/                   # Regra de negócio PURA
-│   ├── entities/
-│   │   ├── user.py
-│   │   ├── chat.py
-│   │   └── organization.py
-│   │
-│   ├── repositories/
-│   │   ├── user_repository.py
-│   │   └── chat_repository.py
-│   │
-│   └── services/
-│       └── auth_service.py
-│
-├── application/              # Casos de uso
-│   ├── use_cases/
-│   │   ├── auth/
-│   │   │   ├── login.py
-│   │   │   └── register.py
-│   │   │
-│   │   ├── users/
-│   │   │   ├── create_user.py
-│   │   │   └── list_users.py
-│   │   │
-│   │   └── chats/
-│   │       ├── send_message.py
-│   │       └── finish_chat.py
-│   │
-│   ├── dto/
-│   │   ├── user_dto.py
-│   │   └── chat_dto.py
-│   │
-│   └── interfaces/
-│       └── unit_of_work.py
-│
-├── infrastructure/           # Banco, APIs externas, etc
-│   ├── database/
-│   │   ├── models/
-│   │   │   ├── user_model.py
-│   │   │   └── chat_model.py
-│   │   │
-│   │   ├── repositories/
-│   │   │   ├── sql_user_repository.py
-│   │   │   └── sql_chat_repository.py
-│   │   │
-│   │   ├── session.py
-│   │   └── base.py
-│   │
-│   ├── external/
-│   │   ├── whatsapp/
-│   │   ├── email/
-│   │   ├── push/
-│   │   └── openai/
-│   │
-│   └── queue/
-│       └── redis.py
-│
-├── shared/
-│   ├── utils/
-│   ├── constants/
-│   └── schemas/
-│
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-│
-└── migrations/
+├── 📁 app
+│   ├── 📁 api
+│   │   ├── 📁 routes
+│   │   │   ├── 📝 README.md
+│   │   │   └── 🐍 __init__.py
+│   │   ├── 📝 README.md
+│   │   └── 🐍 __init__.py
+│   ├── 📁 core
+│   │   ├── 📝 README.md
+│   │   ├── 🐍 __init__.py
+│   │   ├── 🐍 config.py
+│   │   └── 🐍 connection.py
+│   ├── 📁 middleware
+│   │   ├── 📝 README.md
+│   │   └── 🐍 __init__.py
+│   ├── 📁 models
+│   │   ├── 📝 README.md
+│   │   └── 🐍 __init__.py
+│   ├── 📁 repositories
+│   │   ├── 📝 README.md
+│   │   └── 🐍 __init__.py
+│   ├── 📁 schemas
+│   │   ├── 📝 README.md
+│   │   └── 🐍 __init__.py
+│   ├── 📁 services
+│   │   ├── 📝 README.md
+│   │   └── 🐍 __init__.py
+│   ├── 📁 tests
+│   │   ├── 📝 README.md
+│   │   └── 🐍 __init__.py
+│   ├── 📁 utils
+│   │   ├── 📝 README.md
+│   │   └── 🐍 __init__.py
+│   ├── 📝 README.md
+│   └── 🐍 __init__.py
+└── 🐍 main.py
 ```
