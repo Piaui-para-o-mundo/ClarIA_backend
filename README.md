@@ -60,3 +60,58 @@ docker-compose down -v
 - `Dockerfile`: build da imagem da aplicação
 - `docker-compose.yaml`: orquestra API + PostgreSQL
 - `requirements.txt`: dependências Python
+
+
+## Arquitetura
+Modelo de estrutura sugerida para a aplicação:
+
+```
+app/
+├── main.py
+├── core/
+│   ├── config.py
+│   ├── security.py
+│   ├── database.py
+│   ├── dependencies.py
+│   └── exceptions.py
+│
+├── api/
+│   ├── routes/
+│   │   ├── auth.py
+	│   ├── users.py
+	│   └── chats.py
+│   
+│   └── router.py
+│
+├── models/
+│   ├── user.py
+│   ├── chat.py
+│   └── organization.py
+│
+├── schemas/
+│   ├── user.py
+│   ├── auth.py
+│   └── chat.py
+│
+├── services/
+│   ├── auth_service.py
+│   ├── chat_service.py
+│   └── notification_service.py
+│
+├── repositories/
+│   ├── user_repository.py
+│   └── chat_repository.py
+│
+├── middleware/
+│   ├── auth.py
+│   └── logging.py
+│
+├── utils/
+│   ├── helpers.py
+│   ├── validators.py
+│   └── formatter.py
+│
+├── tests/
+│
+└── alembic/
+```
