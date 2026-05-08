@@ -1,17 +1,33 @@
-import os
-from dotenv import load_dotenv
+"""Aplicação FastAPI principal.
+
+Ponto de entrada da API, configuração inicial e roteamento.
+"""
+
 from fastapi import FastAPI
+from src.config import settings
 
-load_dotenv()
-
-app = FastAPI()
-
-
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
+app = FastAPI(
+    title="ClarIA Backend",
+    description="API backend para ClarIA",
+    version="1.0.0",
+)
 
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: str | None = None):
-    return {"item_id": item_id, "q": q}
+@app.get("/health")
+def health_check() -> dict[str, str]:
+    """Verificar saúde da aplicação.
+
+    Returns:
+        dict: Status da aplicação.
+    """
+    return {"status": "healthy"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host=settings.API_HOST,
+        port=settings.API_PORT,
+    )

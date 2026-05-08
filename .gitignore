@@ -1,3 +1,8 @@
+# Variáveis de ambiente
+.env
+.env.local
+.env.*.local
+
 # Created by https://www.toptal.com/developers/gitignore/api/python,venv
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,venv
 
@@ -9,6 +14,7 @@ __pycache__/
 
 # C extensions
 *.so
+alembic
 
 # Distribution / packaging
 .Python
