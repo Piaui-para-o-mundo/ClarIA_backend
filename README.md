@@ -64,54 +64,98 @@ docker-compose down -v
 
 ## Arquitetura
 Modelo de estrutura sugerida para a aplicação:
-
+- Exemplo de arquitetura
 ```
 app/
+│
 ├── main.py
-├── core/
+│
+├── core/                     # Configurações globais
 │   ├── config.py
 │   ├── security.py
 │   ├── database.py
 │   ├── dependencies.py
-│   └── exceptions.py
-│
-├── api/
-│   ├── routes/
-│   │   ├── auth.py
-	│   ├── users.py
-	│   └── chats.py
-│   
-│   └── router.py
-│
-├── models/
-│   ├── user.py
-│   ├── chat.py
-│   └── organization.py
-│
-├── schemas/
-│   ├── user.py
-│   ├── auth.py
-│   └── chat.py
-│
-├── services/
-│   ├── auth_service.py
-│   ├── chat_service.py
-│   └── notification_service.py
-│
-├── repositories/
-│   ├── user_repository.py
-│   └── chat_repository.py
-│
-├── middleware/
-│   ├── auth.py
+│   ├── exceptions.py
 │   └── logging.py
 │
-├── utils/
-│   ├── helpers.py
-│   ├── validators.py
-│   └── formatter.py
+├── api/                      # Camada HTTP
+│   ├── v1/
+│   │   ├── routers/
+│   │   │   ├── auth.py
+│   │   │   ├── users.py
+│   │   │   └── chats.py
+│   │   │
+│   │   └── api.py
+│   │
+│   └── middleware/
+│       ├── auth.py
+│       └── tenant.py
+│
+├── domain/                   # Regra de negócio PURA
+│   ├── entities/
+│   │   ├── user.py
+│   │   ├── chat.py
+│   │   └── organization.py
+│   │
+│   ├── repositories/
+│   │   ├── user_repository.py
+│   │   └── chat_repository.py
+│   │
+│   └── services/
+│       └── auth_service.py
+│
+├── application/              # Casos de uso
+│   ├── use_cases/
+│   │   ├── auth/
+│   │   │   ├── login.py
+│   │   │   └── register.py
+│   │   │
+│   │   ├── users/
+│   │   │   ├── create_user.py
+│   │   │   └── list_users.py
+│   │   │
+│   │   └── chats/
+│   │       ├── send_message.py
+│   │       └── finish_chat.py
+│   │
+│   ├── dto/
+│   │   ├── user_dto.py
+│   │   └── chat_dto.py
+│   │
+│   └── interfaces/
+│       └── unit_of_work.py
+│
+├── infrastructure/           # Banco, APIs externas, etc
+│   ├── database/
+│   │   ├── models/
+│   │   │   ├── user_model.py
+│   │   │   └── chat_model.py
+│   │   │
+│   │   ├── repositories/
+│   │   │   ├── sql_user_repository.py
+│   │   │   └── sql_chat_repository.py
+│   │   │
+│   │   ├── session.py
+│   │   └── base.py
+│   │
+│   ├── external/
+│   │   ├── whatsapp/
+│   │   ├── email/
+│   │   ├── push/
+│   │   └── openai/
+│   │
+│   └── queue/
+│       └── redis.py
+│
+├── shared/
+│   ├── utils/
+│   ├── constants/
+│   └── schemas/
 │
 ├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── e2e/
 │
-└── alembic/
+└── migrations/
 ```
