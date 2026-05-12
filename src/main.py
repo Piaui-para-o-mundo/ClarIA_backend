@@ -4,7 +4,7 @@ Ponto de entrada da API, configuração inicial e roteamento.
 """
 
 from fastapi import FastAPI
-from src.config import settings
+from app.core.config import settings
 
 app = FastAPI(
     title="ClarIA Backend",

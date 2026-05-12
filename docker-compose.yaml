@@ -7,9 +7,13 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app/app
+      - ./src:/app
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/appdb
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=appdb
     depends_on:
       - db
 

@@ -6,7 +6,7 @@ e gerenciar as sessões do banco de dados.
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from src.config import settings
+from app.core.config import settings
 
 # Criar engine de conexão
 engine = create_engine(
