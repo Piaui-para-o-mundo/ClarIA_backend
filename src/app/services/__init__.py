@@ -1,2 +1,4 @@
 """Pacote `services` - lógica de negócio."""
-__all__ = ["auth_service", "chat_service", "notification_service"]
+from app.services.auth_service import AuthService
+
+__all__ = ["AuthService", "auth_service", "chat_service", "notification_service"]
