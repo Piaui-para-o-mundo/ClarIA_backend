@@ -2,4 +2,8 @@
 
 Adicionar modelos SQLAlchemy ou entidades aqui.
 """
-__all__ = ["user", "chat", "organization"]
+
+from app.models.user import User
+
+
+__all__ = ["User", "Processo", "Documento"]

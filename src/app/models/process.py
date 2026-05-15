@@ -1,0 +1,80 @@
+
+
+from datetime import datetime
+from enum import Enum as pyEnum
+from uuid import uuid4
+
+from sqlalchemy import (
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    Text,
+    func,
+)
+
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.user import Base
+
+class Process(Base):
+    """
+    Processo de requerimento.
+
+    Representa um requerimento de professor(progressao, promocao, etc. )
+    com seus documentos e analises
+    """
+
+    __tablename__ = "processes"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        nullable=False,
+    )
+    numero: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    usuario_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tipo: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    status: Mapped[StatusEnum] = mapped_column(
+        Enum(StatusEnum),
+        nullable=False,
+        default=StatusEnum.AGUARDANDO_ANALISE,
+        index=True,
+    )
+    despacho_automatico: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    despacho_avaliador: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    atualizado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<Processo {self.numero} - {self.status}>"
