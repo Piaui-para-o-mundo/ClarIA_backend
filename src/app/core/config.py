@@ -30,8 +30,6 @@ class Settings(BaseSettings):
     API_PORT: int = int(os.getenv("API_PORT", "8000"))
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
 
-    database_url: str = Field(..., alias="DATABASE_URL")
-    
     # Security
     secret_key: str = Field(..., alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
@@ -60,6 +58,10 @@ class Settings(BaseSettings):
         Returns:
             str: URL de conexão PostgreSQL formatada.
         """
+        env_database_url = os.getenv("DATABASE_URL")
+        if env_database_url:
+            return env_database_url
+
         return (
             f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
