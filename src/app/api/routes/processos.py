@@ -1,5 +1,5 @@
 
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import (
     APIRouter,
@@ -52,18 +52,18 @@ async def criar_processo(
     processo = await ProcessoService.criar_processo(
         db=db,
         user=user,
-        tipe=processo_data.tipo,
+        tipo=processo_data.tipo,
     )
     await db.commit()
 
     return ProcessoResponse.from_orm(processo)
 
 
-@router.get("", response_model=list[processoResumo])
+@router.get("", response_model=list[ProcessoResumo])
 async def listar_processos(
     skip: int = 0,
     limit: int = 50,
-    token: Annotated[str, Depends(oauth2_scheme)] = None,
+    token: Annotated[Optional[str], Depends(oauth2_scheme)] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -84,11 +84,11 @@ async def listar_processos(
 
     return [ProcessoResumo.from_orm(p) for p in processos]
 
-@router.get("/my", response_model=list[processoResumo])
+@router.get("/my", response_model=list[ProcessoResumo])
 async def list_my_processos(
     skip: int = 0,
     limit: int = 50,
-    token: Annotated[str, Depends(oauth2_scheme)] = None,
+    token: Annotated[Optional[str], Depends(oauth2_scheme)] = None,
     db: AsyncSession = Depends(get_db),
 ): 
     """
@@ -145,10 +145,10 @@ async def get_processo(
 @router.post("/{processo_id}/documentos")
 async def upload_documentos(
     processo_id: int,
+    background_tasks: BackgroundTasks,
     arquivos: list[UploadFile] = File(...),
     tipos_doc: list[str] = Form(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    token: Annotated[str, Depends(oauth2_scheme)] = None,
+    token: Annotated[Optional[str], Depends(oauth2_scheme)] = None,
     db: AsyncSession = Depends(get_db),
     rag_client: RagClient = Depends(get_rag_client),
 ):
@@ -208,3 +208,108 @@ async def upload_documentos(
         rag_client=rag_client,
     )    
     return {"sucesso": sucesso, "falhas": len(arquivos) - sucesso}
+
+
+
+@router.patch("/{processo_id}/status", response_model=ProcessoResponse)
+async def update_status_processo(
+    processo_id: int,
+    new_state: str,
+    token: Annotated[Optional[str], Depends(oauth2_scheme)] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Atualiza Status do processo (avaliador).
+
+    Args: 
+        processo_id: ID do processo.
+        new_state: Novo status (em_analise, aprovado, reprovado).
+        
+    Returns:
+        ProcessoResponse: Processo atualizado.
+    """
+    from app.models.process import StatusEnum
+
+    try:
+        status_enum = StatusEnum(new_state)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Status inválido: {new_state}",
+        )
+    
+    processo = await ProcessoService.atualizar_status(
+        db=db,
+        processo_id=processo_id,
+        novo_status=status_enum,
+    )
+
+    if not processo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Processo não encontrado",
+        )
+    
+    await db.commit()
+
+    return ProcessoResponse.from_orm(processo)
+
+
+async def _verificar_conformidade_background(
+    db: AsyncSession,
+    processo_id: int,
+    rag_client: RagClient,
+):
+    """
+    Task de background para verificar conformidade via RAG.
+    
+    Args:
+        db: Sessão de banco.
+        processo_id: ID do processo.
+        rag_client: Cliente RAG.
+    """
+    try:
+        from app.models.process import StatusEnum
+
+        texto = await ProcessoService.gerar_texto_conformidade(db=db, processo_id=processo_id)
+
+        if not texto:
+            return
+        
+        result = await rag_client.verificar_conformidade(
+            texto_documento=texto,
+            tipo_processo="tipo_processo",
+        )
+
+        conformidade = result.get("conformidade_pct", 0)
+        pendencias = result.get("pendencias", [])
+
+
+        if conformidade < 100:
+            despacho = await rag_client.sugerir_despacho(
+                texto_documento=texto,
+                pendencias=", ".join(pendencias),
+            )
+            
+            await ProcessoService.salvar_despacho_automatico(
+                db=db,
+                processo_id=processo_id,
+                despacho=despacho.get("despacho", ""),
+            )
+            
+            await ProcessoService.atualizar_status(
+                db=db,
+                processo_id=processo_id,
+                novo_status=StatusEnum.PENDENTE_PROFESSOR,
+            )
+        else:
+            await ProcessoService.atualizar_status(
+                db=db,
+                processo_id=processo_id,
+                novo_status=StatusEnum.ANALISE_PENDENTE,
+            )
+        
+        await db.commit()
+    except Exception as e:
+        print(f"Erro em background task: {e}")
+        
