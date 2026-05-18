@@ -4,7 +4,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
-    assync_sessionmaker,
+    async_sessionmaker,
     create_async_engine,
 )
 
@@ -39,7 +39,7 @@ def get_session_factory(engine: AsyncEngine) -> async_sessionmaker:
     Returns:
         async_sessionmaker: Factory para gerar sessões.
     """
-    return assync_sessionmaker(
+    return async_sessionmaker(
         engine,
         class_=AsyncSession,
         expire_on_commit=False,
