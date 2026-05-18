@@ -150,7 +150,7 @@ class RagClient:
         """Fecha cliente HTTP."""
         await self.client.aclose()
 
-async def get_rag_client() -> RAGClient:
+async def get_rag_client() -> RagClient:
     """
     Dependency injection para RAGClient.
     
