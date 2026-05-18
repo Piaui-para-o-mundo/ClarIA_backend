@@ -2,7 +2,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -11,14 +11,14 @@ from app.services.processo_service import ProcessoService
 from app.services.rag_service import RagClient, get_rag_client
 
 router = APIRouter(prefix="/api/v1/analise", tags=["analise"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+bearer_scheme = HTTPBearer()
 
 
 
 @router.get("/{processo_id}/resumo")
 async def get_resumo(
     processo_id: str,
-    token: Annotated[str, Depends(oauth2_scheme)] = None,
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
     rag_client: Annotated[RagClient, Depends(get_rag_client)] = None,
 ):
@@ -32,7 +32,7 @@ async def get_resumo(
         dict: {"resumo": str, "palavra_chave": list[str]}
     """
 
-    user = await get_current_user(token, db)
+    user = await get_current_user(token.credentials, db)
 
     processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
 
@@ -59,7 +59,7 @@ async def get_resumo(
 @router.get("/{processo_id}/conformidade")
 async def get_conformidade(
     processo_id: str,
-    token: Annotated[str, Depends(oauth2_scheme)] = None,
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
     rag_client: RagClient = Depends(get_rag_client),
 ):
@@ -73,7 +73,7 @@ async def get_conformidade(
         dict: {"conformidade_pct": float, "pendencias": list[str]}
     """
 
-    usuario = await get_current_user(token, db)
+    usuario = await get_current_user(token.credentials, db)
     
     processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
     if not processo:
@@ -96,7 +96,7 @@ async def get_conformidade(
 @router.get("/{processo_id}/despacho")
 async def gerar_despacho(
     processo_id: str,
-    token: Annotated[str, Depends(oauth2_scheme)] = None,
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
     rag_client: RagClient = Depends(get_rag_client),
 ):
@@ -110,7 +110,7 @@ async def gerar_despacho(
         dict: {"despacho": str, "motivo": str}
     """
 
-    user = await get_current_user(token, db)
+    user = await get_current_user(token.credentials, db)
 
     processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
     if not processo:
@@ -135,7 +135,7 @@ async def gerar_despacho(
 async def aprovar_despacho(
     processo_id: str,
     despacho_editado: str,
-    token: Annotated[str, Depends(oauth2_scheme)] = None,
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -151,7 +151,7 @@ async def aprovar_despacho(
 
     from app.models.process import StatusEnum
 
-    user = await get_current_user(token, db)
+    user = await get_current_user(token.credentials, db)
 
     processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
     if not processo:

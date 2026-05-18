@@ -12,7 +12,7 @@ from app.schemas.auth import TokenPayload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 async def get_current_user(
-    token: Annotated[str, Depends(lambda: "")],
+    token: str,
     db: AsyncSession
 ) -> User:
     """

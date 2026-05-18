@@ -64,6 +64,14 @@ async def init_db() -> None:
     if _session_factory is None:
         _session_factory = get_session_factory(_engine)
 
+    # Importa os modelos para registrar as tabelas no metadata antes do create_all.
+    from app import models  # noqa: F401
+
+    async with _engine.begin() as conn:
+        from app.models.user import Base
+
+        await conn.run_sync(Base.metadata.create_all)
+
 async def close_db() -> None:
     """
     Fecha conexoes com database na shutdown da aplicação.

@@ -9,20 +9,20 @@ from app.core.config import get_settings
 
 
 pwd_context = CryptContext(
-    schemes=["bcrypt"],
+    schemes=["bcrypt_sha256"],
     deprecated="auto",
-    bcrypt__rounds=12  
+    bcrypt_sha256__rounds=12,
 )
 
 def hash_password(password: str) -> str:
     """
-    Hash de senha usando bcrypt.
+    Hash de senha usando bcrypt_sha256.
 
     Args:
         password: Senha em plaintext.
 
     Returns:
-        str: Hash bcrypt da senha.
+        str: Hash da senha.
     """
     return pwd_context.hash(password)
 

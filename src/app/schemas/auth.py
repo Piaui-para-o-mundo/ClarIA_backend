@@ -1,6 +1,7 @@
 
 
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, EmailStr
 
@@ -15,10 +16,17 @@ class UserCreate(BaseModel):
     setor: str | None = Field(default=None, max_length=100)
 
 
+class UserLogin(BaseModel):
+    """Schema para login com email e senha."""
+
+    email: EmailStr
+    senha: str = Field(..., min_length=8, max_length=255)
+
+
 class UserResponse(BaseModel):
     """Schema para response de usuário (seguro, sem senha)."""
     
-    id: str
+    id: UUID
     nome: str
     email: str
     role: str

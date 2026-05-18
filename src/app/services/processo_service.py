@@ -20,7 +20,7 @@ class ProcessoService:
     UPLOAD_DIR = Path("uploads")
 
     @classmethod
-    async def _get_upload_path(cls, processo_id: str, tipo_doc: str) -> Path:
+    def _get_upload_path(cls, processo_id: str, tipo_doc: str) -> Path:
         """
         Retorna path onde o documento sera salvo
 
@@ -32,7 +32,7 @@ class ProcessoService:
             Path: Path relativo do arquivo.
         """
 
-        dir_path = cls.UPLOAD_DIR / processo_id
+        dir_path = cls.UPLOAD_DIR / str(processo_id)
         dir_path.mkdir(parents=True, exist_ok=True)
 
         timestamp = uuid4().hex[:8]
@@ -41,7 +41,7 @@ class ProcessoService:
         return dir_path / filename
     
     @staticmethod
-    async def criar_processo(db: AsyncSession, user: User, tipe: str) -> Processo:
+    async def criar_processo(db: AsyncSession, user: User, tipo: str) -> Processo:
         """
         Cria novo processo
 
@@ -51,7 +51,7 @@ class ProcessoService:
         Args:
             db (AsyncSession): Sessao do banco de dados.
             user (User): Usuario que esta criando o processo.
-            tipe (str): Tipo do processo.
+            tipo (str): Tipo do processo.
 
         Returns:
             Processo: O processo criado.
@@ -64,7 +64,8 @@ class ProcessoService:
 
         processo = Processo(
             numero=numero,
-            user_id=user.id,
+            usuario_id=user.id,
+            tipo=tipo,
             status=StatusEnum.AGUARDANDO_DOCUMENTOS,
         )
 
@@ -95,7 +96,7 @@ class ProcessoService:
             select(Processo)
             .offset(skip)
             .limit(limit)
-            .order_by(Processo.created_at.desc())
+            .order_by(Processo.criado_em.desc())
         )
         result = await db.execute(stmt)
         return result.scalars().all()
@@ -179,9 +180,9 @@ class ProcessoService:
         
         documento = Documento(
             processo_id=processo_id,
-            name_arquivo=name_arquivo,
+            nome_arquivo=name_arquivo,
             tipo_doc=tipo_doc,
-            caminho=str(caminho),
+            caminho_arquivo=str(caminho),
         )
 
         db.add(documento)

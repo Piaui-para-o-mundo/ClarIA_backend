@@ -1,6 +1,7 @@
 
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -19,7 +20,7 @@ class ProcessoCreate(BaseModel):
 class ProcessoResumo(BaseModel):
     """Schema resumido de processo (para listagem)."""
     
-    id: str
+    id: UUID
     numero: str
     tipo: str
     status: str
@@ -32,11 +33,11 @@ class ProcessoResumo(BaseModel):
 class ProcessoResponse(BaseModel):
     """Schema completo de processo com documentos."""
     
-    id: str
+    id: UUID
     numero: str
     tipo: str
     status: str
-    usuario_id: str
+    usuario_id: UUID
     despacho_automatico: str | None
     despacho_avaliador: str | None
     criado_em: datetime

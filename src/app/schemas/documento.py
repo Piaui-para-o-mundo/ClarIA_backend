@@ -1,6 +1,7 @@
 
 
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -8,8 +9,8 @@ from pydantic import BaseModel
 class DocumentoResponse(BaseModel):
     """Schema para response de documento."""
     
-    id: str
-    processo_id: str
+    id: UUID
+    processo_id: UUID
     nome_arquivo: str
     tipo_doc: str
     caminho_arquivo: str

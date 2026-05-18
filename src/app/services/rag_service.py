@@ -158,7 +158,7 @@ async def get_rag_client() -> RagClient:
         RAGClient: Cliente configurado.
     """
     settings = get_settings()
-    client = RAGClient(
+    client = RagClient(
         base_url=settings.rag_service_url,
         timeout=settings.rag_service_timeout,
     )

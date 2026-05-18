@@ -3,7 +3,7 @@ from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,11 +14,11 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
-from app.schemas.auth import TokenResponse, UserCreate, UserResponse
+from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+bearer_scheme = HTTPBearer()
 
 @router.post("/register", response_model=UserResponse)
 async def register(
@@ -49,9 +49,9 @@ async def register(
         )
 
     new_user = User(
-        name=user_data.name,
+        nome=user_data.nome,
         email=user_data.email,
-        hashed_password=hash_password(user_data.password),
+        senha_hash=hash_password(user_data.senha),
         role=user_data.role,
         setor=user_data.setor,
     )
@@ -65,14 +65,14 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    credentials: UserLogin,
     db: AsyncSession = Depends(get_db),
 ):
     """
     Autentica usuário e retorna token JWT.
     
     Args:
-        form_data: Dados de login (email, senha).
+        credentials: Dados de login (email, senha).
         db: Sessão de banco.
         
     Returns:
@@ -81,18 +81,18 @@ async def login(
     Raises:
         HTTPException: Se credenciais inválidas.
     """
-    stmt = select(User).where(User.email == form_data.username)
+    stmt = select(User).where(User.email == credentials.email)
     result = await db.execute(stmt)
     user = result.scalars().first()
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user or not verify_password(credentials.senha, user.senha_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciais inválidas",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active:
+    if not user.ativo:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Usuário inativo",
@@ -109,7 +109,7 @@ async def login(
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
 ): 
     """
@@ -124,5 +124,5 @@ async def get_current_user_info(
     """
     from app.core.dependencies import get_current_user
     
-    user = await get_current_user(token, db)
+    user = await get_current_user(token.credentials, db)
     return user

@@ -1,5 +1,6 @@
 
-from typing import Annotated, Optional
+from typing import Annotated
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -8,11 +9,10 @@ from fastapi import (
     File,
     Form,
     HTTPException,
-    UploadFile,
     status,    
 )
 
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -28,12 +28,12 @@ from app.services.processo_service import ProcessoService
 from app.services.rag_service import RagClient, get_rag_client
 
 router = APIRouter(prefix="/api/v1/processos", tags=["processos"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+bearer_scheme = HTTPBearer()
 
 @router.post("/", response_model=ProcessoResponse)
 async def criar_processo(
     processo_data: ProcessoCreate,
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -47,7 +47,7 @@ async def criar_processo(
     Returns:
         ProcessoResponse: Processo criado.
     """
-    user = await get_current_user(token, db)
+    user = await get_current_user(token.credentials, db)
 
     processo = await ProcessoService.criar_processo(
         db=db,
@@ -61,9 +61,9 @@ async def criar_processo(
 
 @router.get("", response_model=list[ProcessoResumo])
 async def listar_processos(
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     skip: int = 0,
     limit: int = 50,
-    token: Annotated[Optional[str], Depends(oauth2_scheme)] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -86,9 +86,9 @@ async def listar_processos(
 
 @router.get("/my", response_model=list[ProcessoResumo])
 async def list_my_processos(
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     skip: int = 0,
     limit: int = 50,
-    token: Annotated[Optional[str], Depends(oauth2_scheme)] = None,
     db: AsyncSession = Depends(get_db),
 ): 
     """
@@ -102,7 +102,7 @@ async def list_my_processos(
         list[ProcessoResumo]: Processos resumidos do professor.
     """
 
-    user = await get_current_user(token, db)
+    user = await get_current_user(token.credentials, db)
 
     processos = await ProcessoService.listar_processos_user(
         db=db,
@@ -115,8 +115,8 @@ async def list_my_processos(
 
 @router.get("/{processo_id}", response_model=ProcessoResponse)
 async def get_processo(
-    processo_id: int,
-    token: Annotated[str, Depends(oauth2_scheme)],
+    processo_id: UUID,
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -144,11 +144,11 @@ async def get_processo(
 
 @router.post("/{processo_id}/documentos")
 async def upload_documentos(
-    processo_id: int,
+    processo_id: UUID,
     background_tasks: BackgroundTasks,
-    arquivos: list[UploadFile] = File(...),
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    arquivos: list[str] = Form(...),
     tipos_doc: list[str] = Form(...),
-    token: Annotated[Optional[str], Depends(oauth2_scheme)] = None,
     db: AsyncSession = Depends(get_db),
     rag_client: RagClient = Depends(get_rag_client),
 ):
@@ -167,7 +167,7 @@ async def upload_documentos(
         dict: {"sucesso": int, "falhas": int}
     """
 
-    user = await get_current_user(token, db)
+    user = await get_current_user(token.credentials, db)
 
     processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
     if not processo or getattr(processo, "usuario_id", None) != user.id:
@@ -183,19 +183,19 @@ async def upload_documentos(
         )
     
     sucesso = 0
-    for arquivo, tipo_doc in zip(arquivos, tipos_doc):
+    for arquivo_texto, tipo_doc in zip(arquivos, tipos_doc):
         try:
-            conteudo = await arquivo.read()
+            arquivo_bytes = arquivo_texto.encode("latin-1")
             await ProcessoService.save_documento(
                 db=db,
                 processo_id=processo_id,
                 tipo_doc=tipo_doc,
-                arquivo_bytes=conteudo,
-                name_arquivo=arquivo.filename,
+                arquivo_bytes=arquivo_bytes,
+                name_arquivo=f"{tipo_doc}.pdf",
             )
             sucesso += 1
         except Exception as e:
-            print(f"Erro ao salvar documento {arquivo.filename}: {e}")
+            print(f"Erro ao salvar documento {tipo_doc}: {e}")
             continue
 
     
@@ -213,9 +213,9 @@ async def upload_documentos(
 
 @router.patch("/{processo_id}/status", response_model=ProcessoResponse)
 async def update_status_processo(
-    processo_id: int,
+    processo_id: UUID,
     new_state: str,
-    token: Annotated[Optional[str], Depends(oauth2_scheme)] = None,
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -238,7 +238,7 @@ async def update_status_processo(
             detail=f"Status inválido: {new_state}",
         )
     
-    processo = await ProcessoService.atualizar_status(
+    processo = await ProcessoService.update_status(
         db=db,
         processo_id=processo_id,
         novo_status=status_enum,
@@ -257,7 +257,7 @@ async def update_status_processo(
 
 async def _verificar_conformidade_background(
     db: AsyncSession,
-    processo_id: int,
+    processo_id: UUID,
     rag_client: RagClient,
 ):
     """
@@ -271,7 +271,7 @@ async def _verificar_conformidade_background(
     try:
         from app.models.process import StatusEnum
 
-        texto = await ProcessoService.gerar_texto_conformidade(db=db, processo_id=processo_id)
+        texto = await ProcessoService.get_documentos_text_concatenado(db=db, processo_id=processo_id)
 
         if not texto:
             return
@@ -291,19 +291,19 @@ async def _verificar_conformidade_background(
                 pendencias=", ".join(pendencias),
             )
             
-            await ProcessoService.salvar_despacho_automatico(
+            await ProcessoService.save_despacho_automatico(
                 db=db,
                 processo_id=processo_id,
                 despacho=despacho.get("despacho", ""),
             )
             
-            await ProcessoService.atualizar_status(
+            await ProcessoService.update_status(
                 db=db,
                 processo_id=processo_id,
                 novo_status=StatusEnum.PENDENTE_PROFESSOR,
             )
         else:
-            await ProcessoService.atualizar_status(
+            await ProcessoService.update_status(
                 db=db,
                 processo_id=processo_id,
                 novo_status=StatusEnum.ANALISE_PENDENTE,

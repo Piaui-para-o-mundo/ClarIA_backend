@@ -14,7 +14,7 @@ from sqlalchemy import (
 )
 
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.user import Base
 
@@ -85,6 +85,12 @@ class Process(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    documentos: Mapped[list["Documento"]] = relationship(
+        "Documento",
+        backref="processo",
+        lazy="selectin",
     )
     
     def __repr__(self) -> str:
