@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.documento import Documento
-from app.models.processo import Processo, StatusEnum
+from app.models.process import Processo, StatusEnum
 from app.models.user import User
 
-from app.services.rag_client import RagClient
+from app.services.rag_service import RagClient
 
 
 class ProcessoService:
