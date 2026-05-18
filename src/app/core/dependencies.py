@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from jose import JWTErrors
+from jose import JWTError
 
 from app.core.database import get_db
 from app.core.security import decode_token
@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 async def get_current_user(
     token: Annotated[str, Depends(lambda: "")],
     db: AsyncSession
-) -> Usuario:
+) -> User:
     """
     Dependency que valida JWT e retorna usuario logado.
 
@@ -41,7 +41,7 @@ async def get_current_user(
         if user_id is None:
             raise credentials_exception
         token_data = TokenPayload(sub=user_id)
-    except JWTErrors:
+    except JWTError:
         raise credentials_exception
     
 
@@ -54,7 +54,7 @@ async def get_current_user(
     
     return user
 
-async def get_current_active_user(*allowed_roles: str):
+def get_current_active_user(*allowed_roles: str):
     """
     Factory de dependency que valida role do usuario
 
@@ -78,4 +78,7 @@ async def get_current_active_user(*allowed_roles: str):
             )
         return current_user
     return role_checker
+
+
+require_role = get_current_active_user
     
