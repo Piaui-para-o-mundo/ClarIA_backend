@@ -18,7 +18,7 @@ from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, Enum, String, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.ext.declarative import DeclarativeBase,Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
     """Base class para todos os modelos."""
@@ -30,6 +30,9 @@ class Role(str, PyEnum):
     """Roles disponiveis"""
     PROFESSOR = "professor"
     AVALIADOR = "avaliador"
+
+
+RoleEnum = Role
 
 class User(Base):
     """Modelo Usuario — Professores e Avaliadores."""
@@ -56,10 +59,10 @@ class User(Base):
         String(255),
         nullable=False,
     )
-    role: Mapped[RoleEnum] = mapped_column(
-        Enum(RoleEnum),
+    role: Mapped[Role] = mapped_column(
+        Enum(Role),
         nullable=False,
-        default=RoleEnum.PROFESSOR,
+        default=Role.PROFESSOR,
     )
     setor: Mapped[str | None] = mapped_column(
         String(100),
