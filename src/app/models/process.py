@@ -18,6 +18,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.user import Base
 
+class StatusEnum(str, pyEnum):
+    AGUARDANDO_DOCUMENTOS = "aguardando_documentos"
+    AGUARDANDO_ANALISE = "aguardando_analise"
+    EM_ANALISE = "em_analise"
+    ANALISE_PENDENTE = "analise_pendente"
+    PENDENTE_PROFESSOR = "pendente_professor"
+    CONCLUIDO = "concluido"
+    APROVADO = "aprovado"
+    REPROVADO = "reprovado"
+
+
 class Process(Base):
     """
     Processo de requerimento.
@@ -26,7 +37,7 @@ class Process(Base):
     com seus documentos e analises
     """
 
-    __tablename__ = "processes"
+    __tablename__ = "processos"
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
@@ -78,3 +89,6 @@ class Process(Base):
     
     def __repr__(self) -> str:
         return f"<Processo {self.numero} - {self.status}>"
+
+
+Processo = Process
