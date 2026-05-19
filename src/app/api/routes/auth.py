@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi import Form
+from pydantic import ValidationError
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +47,13 @@ async def register(
         form = await request.form()
         body = dict(form)
 
-    user_data = UserCreate(**body)
+    try:
+        user_data = UserCreate(**body)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors(),
+        )
 
     stmt = select(User).where(User.email == user_data.email)
     result = await db.execute(stmt)
@@ -98,7 +105,13 @@ async def login(
         form = await request.form()
         body = dict(form)
 
-    credentials = UserLogin(**body)
+    try:
+        credentials = UserLogin(**body)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors(),
+        )
 
     stmt = select(User).where(User.email == credentials.email)
     result = await db.execute(stmt)
