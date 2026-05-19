@@ -1,6 +1,7 @@
 
 from typing import Annotated
 from uuid import UUID
+import asyncio
 
 from fastapi import (
     APIRouter,
@@ -9,6 +10,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    UploadFile,
     status,    
 )
 
@@ -147,24 +149,32 @@ async def upload_documentos(
     processo_id: UUID,
     background_tasks: BackgroundTasks,
     token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
-    arquivos: list[str] = Form(...),
+    arquivos: list[UploadFile] = File(...),
     tipos_doc: list[str] = Form(...),
     db: AsyncSession = Depends(get_db),
     rag_client: RagClient = Depends(get_rag_client),
 ):
     """
-    Upload de multiplos documentos  para um processo.
+    Upload de múltiplos documentos para um processo com suporte a paralelismo.
     
+    Aceita múltiplos arquivos que são processados em paralelo para melhor performance.
     Após upload, dispara background task para verificar conformidade via RAG.
     
     Args:
         processo_id: ID do processo.
         arquivos: Lista de arquivos (multipart/form-data).
-        tipos_doc: Lista de tipos (requerimento, cpf, etc.) em mesmo ordem.
-        background_tasks: Task runner.
+        tipos_doc: Lista de tipos (requerimento, cpf, etc.) em mesmo ordem que arquivos.
+        background_tasks: Task runner para background processing.
+        token: Token JWT de autenticação.
+        db: Sessão de banco de dados.
+        rag_client: Cliente RAG para análise.
         
     Returns:
-        dict: {"sucesso": int, "falhas": int}
+        dict: {"sucesso": int, "falhas": int, "detalhes": list[dict]}
+        
+    Raises:
+        HTTPException: Se processo não encontrado ou acesso negado.
+        HTTPException: Se número de arquivos não coincide com tipos.
     """
 
     user = await get_current_user(token.credentials, db)
@@ -179,35 +189,82 @@ async def upload_documentos(
     if len(arquivos) != len(tipos_doc):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Número de arquivos nao coincide com tipos",
+            detail=f"Número de arquivos ({len(arquivos)}) não coincide com tipos ({len(tipos_doc)})",
         )
     
-    sucesso = 0
-    for arquivo_texto, tipo_doc in zip(arquivos, tipos_doc):
+    # Processa upload de documentos em paralelo
+    async def processar_documento(arquivo: UploadFile, tipo_doc: str, idx: int):
+        """Processa um único documento de forma assíncrona."""
         try:
-            arquivo_bytes = arquivo_texto.encode("latin-1")
+            # Lê conteúdo do arquivo
+            arquivo_bytes = await arquivo.read()
+            
+            # Valida tamanho (máx 50MB)
+            if len(arquivo_bytes) > 50 * 1024 * 1024:
+                return {
+                    "indice": idx,
+                    "tipo": tipo_doc,
+                    "nome": arquivo.filename,
+                    "sucesso": False,
+                    "erro": "Arquivo muito grande (máximo 50MB)"
+                }
+            
+            # Salva documento
             await ProcessoService.save_documento(
                 db=db,
                 processo_id=processo_id,
                 tipo_doc=tipo_doc,
                 arquivo_bytes=arquivo_bytes,
-                name_arquivo=f"{tipo_doc}.pdf",
+                name_arquivo=arquivo.filename or f"{tipo_doc}.pdf",
             )
-            sucesso += 1
+            
+            return {
+                "indice": idx,
+                "tipo": tipo_doc,
+                "nome": arquivo.filename,
+                "sucesso": True,
+                "erro": None
+            }
         except Exception as e:
-            print(f"Erro ao salvar documento {tipo_doc}: {e}")
-            continue
-
+            return {
+                "indice": idx,
+                "tipo": tipo_doc,
+                "nome": arquivo.filename,
+                "sucesso": False,
+                "erro": str(e)
+            }
+        finally:
+            # Fecha arquivo
+            await arquivo.close()
     
+    # Executa upload de todos os documentos em paralelo
+    tasks = [
+        processar_documento(arquivo, tipo, idx)
+        for idx, (arquivo, tipo) in enumerate(zip(arquivos, tipos_doc))
+    ]
+    
+    resultados = await asyncio.gather(*tasks)
+    
+    # Conta sucessos e falhas
+    sucesso = sum(1 for r in resultados if r["sucesso"])
+    falhas = len(resultados) - sucesso
+    
+    # Commit no banco
     await db.commit()
 
+    # Dispara background task para verificar conformidade
     background_tasks.add_task(
         _verificar_conformidade_background,
         db=db,
         processo_id=processo_id,
         rag_client=rag_client,
-    )    
-    return {"sucesso": sucesso, "falhas": len(arquivos) - sucesso}
+    )
+    
+    return {
+        "sucesso": sucesso,
+        "falhas": falhas,
+        "detalhes": resultados
+    }
 
 
 
