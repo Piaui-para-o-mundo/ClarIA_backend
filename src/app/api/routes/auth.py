@@ -2,7 +2,8 @@
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import Form
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +23,7 @@ bearer_scheme = HTTPBearer()
 
 @router.post("/register", response_model=UserResponse)
 async def register(
-    user_data: UserCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -38,6 +39,15 @@ async def register(
     Raises:
         HTTPException: Se email já existe.
     """
+    # Accept JSON body or form-encoded data (from HTML forms)
+    if request.headers.get("content-type", "").startswith("application/json"):
+        body = await request.json()
+    else:
+        form = await request.form()
+        body = dict(form)
+
+    user_data = UserCreate(**body)
+
     stmt = select(User).where(User.email == user_data.email)
     result = await db.execute(stmt)
     existing_user = result.scalars().first()
@@ -65,7 +75,7 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
-    credentials: UserLogin,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -81,6 +91,15 @@ async def login(
     Raises:
         HTTPException: Se credenciais inválidas.
     """
+    # Accept JSON or form data
+    if request.headers.get("content-type", "").startswith("application/json"):
+        body = await request.json()
+    else:
+        form = await request.form()
+        body = dict(form)
+
+    credentials = UserLogin(**body)
+
     stmt = select(User).where(User.email == credentials.email)
     result = await db.execute(stmt)
     user = result.scalars().first()
