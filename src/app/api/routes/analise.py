@@ -82,7 +82,7 @@ async def get_conformidade(
             detail="Processo não encontrado.",
         )
     
-    texto = await ProcessoService.get_documentos_texto_concatenado(
+    texto = await ProcessoService.get_documentos_text_concatenado(
         db=db,
         processo_id=processo_id,
     )

@@ -29,7 +29,7 @@ services:
       PYTHONPATH: /app/src
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-claria_db}
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
-      RAG_SERVICE_URL: ${RAG_SERVICE_URL:-http://localhost:8001}
+      RAG_SERVICE_URL: ${RAG_SERVICE_URL:-http://host.docker.internal:8001}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       DEBUG: ${DEBUG:-true}
     ports:
@@ -37,6 +37,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - .:/app
       - uploads:/app/uploads
