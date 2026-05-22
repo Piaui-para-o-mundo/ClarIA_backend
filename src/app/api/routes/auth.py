@@ -2,7 +2,7 @@
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from fastapi import Form
 from pydantic import ValidationError
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -82,7 +82,7 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
-    request: Request,
+    credentials: UserLogin = Body(...),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -98,20 +98,7 @@ async def login(
     Raises:
         HTTPException: Se credenciais inválidas.
     """
-    # Accept JSON or form data
-    if request.headers.get("content-type", "").startswith("application/json"):
-        body = await request.json()
-    else:
-        form = await request.form()
-        body = dict(form)
-
-    try:
-        credentials = UserLogin(**body)
-    except ValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=exc.errors(),
-        )
+    # `credentials` is validated by Pydantic via the request body
 
     stmt = select(User).where(User.email == credentials.email)
     result = await db.execute(stmt)
