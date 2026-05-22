@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=60, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     
     # Services
-    rag_service_url: str = Field(default="http://localhost:8001", alias="RAG_SERVICE_URL")
+    rag_service_url: str = Field(default="http://10.10.0.163:8001", alias="RAG_SERVICE_URL")
     rag_service_timeout: int = Field(default=120, alias="RAG_SERVICE_TIMEOUT")
     
     # Environment
