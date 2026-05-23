@@ -16,6 +16,7 @@ from fastapi import (
 
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
@@ -57,6 +58,9 @@ async def criar_processo(
         tipo=processo_data.tipo,
     )
     await db.commit()
+
+    if "documentos" not in processo.__dict__:
+        set_committed_value(processo, "documentos", [])
 
     return ProcessoResponse.from_orm(processo)
 
