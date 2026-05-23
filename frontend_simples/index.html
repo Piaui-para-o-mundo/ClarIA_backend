@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClarIA - Gestão de Processos</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>ClarIA</h1>
+            <nav id="main-nav" class="hidden">
+                <button onclick="showSection('dashboard')">Dashboard</button>
+                <button onclick="logout()">Sair</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Seção de Autenticação -->
+        <section id="auth-section">
+            <div class="card">
+                <h2 id="auth-title">Login</h2>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="email">E-mail</label>
+                        <input type="email" id="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Senha</label>
+                        <input type="password" id="password" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Entrar</button>
+                </form>
+                <p class="toggle-auth">Não tem conta? <a href="#" onclick="toggleAuth(true)">Registre-se</a></p>
+            </div>
+
+            <div class="card hidden" id="register-card">
+                <h2>Registro</h2>
+                <form id="register-form">
+                    <div class="form-group">
+                        <label for="reg-nome">Nome</label>
+                        <input type="text" id="reg-nome" required minlength="3">
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-email">E-mail</label>
+                        <input type="email" id="reg-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-password">Senha</label>
+                        <input type="password" id="reg-password" required minlength="8">
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-role">Papel</label>
+                        <select id="reg-role">
+                            <option value="professor">Professor</option>
+                            <option value="avaliador">Avaliador</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-setor">Setor</label>
+                        <input type="text" id="reg-setor">
+                    </div>
+                    <button type="submit" class="btn-primary">Registrar</button>
+                </form>
+                <p class="toggle-auth">Já tem conta? <a href="#" onclick="toggleAuth(false)">Faça Login</a></p>
+            </div>
+        </section>
+
+        <!-- Seção Dashboard -->
+        <section id="dashboard-section" class="hidden">
+            <div class="card dashboard-hero">
+                <div>
+                    <p class="eyebrow">ClarIA</p>
+                    <h2 id="dashboard-title">Minha área</h2>
+                    <p id="dashboard-subtitle" class="muted">Carregando sua área...</p>
+                </div>
+                <div class="hero-actions">
+                    <button id="btn-novo-processo" class="btn-success" onclick="showCreateProcess()">Novo Processo</button>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <h3>Processos</h3>
+                <button class="btn-secondary" onclick="loadProcessos()">Atualizar</button>
+            </div>
+            <div id="processos-list" class="grid">
+                <!-- Processos serão inseridos aqui via JS -->
+                <p>Carregando processos...</p>
+            </div>
+        </section>
+
+        <!-- Seção Detalhes do Processo -->
+        <section id="detail-section" class="hidden">
+            <button class="btn-secondary" onclick="showSection('dashboard')">← Voltar</button>
+            <div id="processo-info" class="card">
+                <!-- Detalhes do processo via JS -->
+            </div>
+
+            <div class="grid-2-cols">
+                <div class="card">
+                    <h3>Documentos</h3>
+                    <ul id="documentos-list"></ul>
+                    
+                    <div id="upload-area" class="hidden">
+                        <hr>
+                        <h4>Enviar Documento</h4>
+                        <form id="upload-form">
+                            <div class="form-group">
+                                <label>Arquivos PDF</label>
+                                <input type="file" id="upload-file" accept="application/pdf" multiple required>
+                                <small class="muted">Selecione um ou mais documentos de uma vez.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Tipos de Documento</label>
+                                <div id="upload-types-container" class="upload-types"></div>
+                                <small class="muted">Cada arquivo precisa de um tipo correspondente.</small>
+                            </div>
+                            <button type="submit" class="btn-primary">Enviar</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Análise ClarIA (IA)</h3>
+                    <div id="ia-analysis">
+                        <p class="muted">Aguardando documentos para análise...</p>
+                    </div>
+                    <div id="ia-actions" class="hidden">
+                        <button class="btn-info" onclick="triggerAnalysis()">Atualizar análise</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Modal Novo Processo -->
+        <div id="modal-processo" class="modal hidden">
+            <div class="modal-content">
+                <h3>Novo Requerimento</h3>
+                <form id="create-process-form">
+                    <div class="form-group">
+                        <label for="proc-tipo">Tipo de Processo</label>
+                        <select id="proc-tipo">
+                            <option value="progressao_funcional">Progressão Funcional</option>
+                            <option value="promocao">Promoção</option>
+                            <option value="afastamento_mestrado">Afastamento Mestrado</option>
+                            <option value="licenca_premio">Licença Prêmio</option>
+                            <option value="outros">Outros</option>
+                        </select>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
+                        <button type="submit" class="btn-success">Criar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
