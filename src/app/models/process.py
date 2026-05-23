@@ -99,10 +99,12 @@ class Process(Base):
     resumo_ia: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+        comment="Resumo executivo gerado pelo serviço RAG",
     )
     checklist_ia: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+        comment="Resultado do checklist determinístico (JSON)",
     )
     despacho_automatico: Mapped[str | None] = mapped_column(
         Text,

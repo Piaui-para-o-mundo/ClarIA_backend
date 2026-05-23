@@ -317,8 +317,6 @@ async def update_status_processo(
     await db.commit()
 
     return ProcessoResponse.from_orm(processo)
-
-
 @router.get("/{processo_id}/analise", response_model=AnaliseStatusResponse)
 async def get_status_analise(
     processo_id: UUID,
@@ -347,7 +345,7 @@ async def get_status_analise(
         despacho_automatico=processo.despacho_automatico,
     )
 
-<<<<<<< HEAD
+
 @router.post("/{processo_id}/analise", response_model=AnaliseStatusResponse)
 async def iniciar_analise_processo(
     processo_id: UUID,
@@ -398,50 +396,3 @@ async def iniciar_analise_processo(
         checklist_ia=processo.checklist_ia,
         despacho_automatico=processo.despacho_automatico,
     )
-
-=======
-            # 2. Pega o tipo do processo para as regras do RAG
-            processo = await ProcessoService.get_processo(db=db, processo_id=str(processo_id))
-            if not processo:
-                print("[RAG BACKGROUND] Processo não encontrado na base de dados.", flush=True)
-                return
-
-            print(f"[RAG BACKGROUND] Enviando {len(docs_para_envio)} documentos para o ClarIA_RAG_IA (URL: {rag_client.base_url})...", flush=True)
-            
-            # 3. Manda tudo pra super-rota
-            result_ia = await rag_client.analisar_processo(
-                documentos=docs_para_envio,
-                tipo_processo=processo.tipo,
-            )
-            
-            print("[RAG BACKGROUND] Resposta do RAG recebida com sucesso!", flush=True)
-
-            # 4. Grava resultados
-            resumo = result_ia.get("resumo", {})
-            if resumo and "resultado" in resumo:
-                processo.resumo_ia = resumo["resultado"].get("resumo", "")
-            
-            import json
-            processo.checklist_ia = json.dumps(result_ia.get("checklist", {}), ensure_ascii=False)
-            
-            despacho_dict = result_ia.get("despacho", {})
-            if despacho_dict and "resultado" in despacho_dict:
-                processo.despacho_automatico = despacho_dict["resultado"]
-
-            # Se reprovado pelo checklist, fica pendente para professor ou para análise
-            checklist = result_ia.get("checklist", {})
-            if not checklist.get("aprovado", False):
-                processo.status = StatusEnum.PENDENTE_PROFESSOR
-            else:
-                processo.status = StatusEnum.ANALISE_PENDENTE
-
-            await db.commit()
-            print(f"[RAG BACKGROUND] Processo {processo_id} atualizado com análise IA com sucesso.", flush=True)
-
-    except Exception as e:
-        import traceback
-        print(f"[RAG BACKGROUND] Erro CRÍTICO em _analisar_ia_background: {e}", flush=True)
-        traceback.print_exc()
-        print(f"==================================================", flush=True)
-        
->>>>>>> f93a0c9 (fix(processos): correct endpoint path and refactor document upload to sequential processing)
