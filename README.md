@@ -79,3 +79,25 @@ Arquivos importantes
 
 Se quiser, eu ajeito o `README` com comandos específicos para macOS/Linux ou adiciono exemplos de requests curl e um checklist para rodar os testes no CI.
 
+Execução rápida (frontend estático + backend)
+-------------------------------------------
+Se quiser servir o frontend estático na porta 3000 e o backend na 8000 simultaneamente durante desenvolvimento:
+
+1. Servir frontend estático (diretório do projeto):
+
+```bash
+python -m http.server 3000
+```
+
+2. Rodar backend FastAPI com `uvicorn`:
+
+```bash
+export PYTHONPATH=.
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Com isso:
+- Frontend: http://localhost:3000/
+- Backend / Docs: http://localhost:8000/docs
+
+
