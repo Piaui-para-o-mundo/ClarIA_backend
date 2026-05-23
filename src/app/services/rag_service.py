@@ -39,113 +39,46 @@ class RagClient:
         except Exception:
             return False
     
-    async def ingest_documento(self, pdf_content: bytes, filename: str) -> dict[str, Any]:
-        """
-        Envia PDF para indexação no ChromaDB do RAG.       Args:
-            pdf_content: Conteúdo binário do PDF.
-            filename: Nome do arquivo.
-            
-        Returns:
-            dict: Resposta do RAG com índice/ID do documento.
-            
-        Raises:
-            httpx.HTTPError: Se requisição falhar.
-        """
-        files = {
-            "file": (filename, pdf_content, "application/pdf"),
-        }
-        response = await self.client.post(
-            f"{self.base_url}/ia/ingest",
-            files=files,
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    async def gerar_resumo(self, texto_documento: str) -> dict[str, Any]:
-        """
-        Módulo 1 do RAG: Gera resumo inteligente de texto.
-        
-        Args:
-            texto_documento: Texto do documento.
-            
-        Returns:
-            dict: {"resumo": str, "palavras_chave": list[str], ...}
-            
-        Raises:
-            httpx.HTTPError: Se requisição falhar.
-        """
-        payload = {"texto": texto_documento}
-        response = await self.client.post(
-            f"{self.base_url}/ia/resumo",
-            json=payload,
-        )
-        response.raise_for_status()
-        return response.json()
 
-    
-    async def verificar_conformidade(
+
+    async def analisar_processo(
         self,
-        texto_documento: str,
+        documentos: list[tuple[bytes, str]],
         tipo_processo: str,
     ) -> dict[str, Any]:
         """
-        Módulo 2 do RAG: Verifica conformidade documental.
-        
+        Envia os PDFs brutos para o serviço RAG analisar de forma completa.
+
+        Usa a super-rota /ia/analisar que faz internamente:
+        - Classificação por conteúdo (fuzzy matching)
+        - Checklist determinístico
+        - Validação cruzada (antifraude)
+        - Resumo executivo + Despacho
+
         Args:
-            texto_documento: Texto do documento.
-            tipo_processo: Tipo de processo (progressao_funcional, etc.).
-            
+            documentos: Lista de tuplas (bytes_do_pdf, nome_do_arquivo).
+            tipo_processo: Tipo do processo (ex: 'afastamento_pos_graduacao').
+
         Returns:
-            dict: {
-                "conformidade_pct": float,
-                "pendencias": list[str],
-                "detalhes": dict,
-            }
-            
+            dict: Resposta completa do RAG com checklist, resumo e despacho.
+
         Raises:
             httpx.HTTPError: Se requisição falhar.
         """
-        payload = {
-            "texto": texto_documento,
-            "tipo_processo": tipo_processo,
-        }
+        files = [
+            ("files", (nome, conteudo, "application/pdf"))
+            for conteudo, nome in documentos
+        ]
+        data = {"type_process": tipo_processo}
+
         response = await self.client.post(
-            f"{self.base_url}/ia/conformidade",
-            json=payload,
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    async def sugerir_despacho(
-        self,
-        texto_documento: str,
-        pendencias: str,
-    ) -> dict[str, Any]:
-        """
-        Módulo 3 do RAG: Sugere despacho para o avaliador.
-        
-        Args:
-            texto_documento: Texto do documento.
-            pendencias: Descrição das pendências.
-            
-        Returns:
-            dict: {"despacho": str, "motivo": str, ...}
-            
-        Raises:
-            httpx.HTTPError: Se requisição falhar.
-        """
-        payload = {
-            "texto": texto_documento,
-            "pendencias": pendencias,
-        }
-        response = await self.client.post(
-            f"{self.base_url}/ia/despacho",
-            json=payload,
+            f"{self.base_url}/ia/analisar",
+            files=files,
+            data=data,
         )
         response.raise_for_status()
         return response.json()
 
-    
     async def close(self) -> None:
         """Fecha cliente HTTP."""
         await self.client.aclose()
