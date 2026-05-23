@@ -263,10 +263,23 @@ class ProcessoService:
         result = await db.execute(stmt)
         documentos = result.scalars().all()
         
-        textos = [
-            f"[{d.tipo_doc}]\n{d.conteudo_extraido or ""}"
-            for d in documentos
-        ]
+        textos: list[str] = []
+        for documento in documentos:
+            texto = documento.conteudo_extraido or ""
+
+            if not texto and documento.caminho_arquivo:
+                try:
+                    caminho_arquivo = Path(documento.caminho_arquivo)
+                    if caminho_arquivo.exists():
+                        texto = caminho_arquivo.read_text(
+                            encoding="utf-8",
+                            errors="ignore",
+                        ).strip()
+                except OSError:
+                    texto = ""
+
+            if texto:
+                textos.append(f"[{documento.tipo_doc}]\n{texto}")
 
         return "\n\n".join(textos)
     

@@ -40,6 +40,8 @@ class ProcessoResponse(BaseModel):
     usuario_id: UUID
     despacho_automatico: str | None
     despacho_avaliador: str | None
+    resumo_ia: str | None = None
+    checklist_ia: str | None = None
     criado_em: datetime
     atualizado_em: datetime
     documentos: list[DocumentoResponse] = Field(default_factory=list)
