@@ -152,7 +152,6 @@ async def aprovar_despacho(
     from app.models.process import StatusEnum
 
     user = await get_current_user(token.credentials, db)
-
     processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
     if not processo:
         raise HTTPException(
@@ -164,7 +163,7 @@ async def aprovar_despacho(
     await ProcessoService.update_status(
         db=db,
         processo_id=processo_id,
-        novo_status=StatusEnum.concluido,
+        novo_status=StatusEnum.CONCLUIDO,
     )
 
     await db.commit()
