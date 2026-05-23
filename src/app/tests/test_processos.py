@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import app.core.database as _db
 
@@ -178,7 +178,7 @@ class TestGetProcesso:
         # Cria processo
         create_response = client.post(
             "/api/v1/processos/",
-            json={"tipo": "requerimento"},
+            json={"tipo": "progressao_funcional"},
             headers={"Authorization": f"Bearer {token}"}
         )
         processo_id = create_response.json()["id"]
@@ -468,3 +468,75 @@ class TestAtualizarStatusProcesso:
             headers={"Authorization": f"Bearer {token}"}
         )
         assert response.status_code == 400
+
+
+class TestAnaliseAutomatica:
+    """Testes para o fluxo automático de análise da IA."""
+
+    @patch("app.services.rag_service.RagClient.sugerir_despacho", new_callable=AsyncMock)
+    @patch("app.services.rag_service.RagClient.verificar_conformidade", new_callable=AsyncMock)
+    @patch("app.services.rag_service.RagClient.gerar_resumo", new_callable=AsyncMock)
+    def test_upload_dispara_analise_automatica_idempotente(
+        self,
+        mock_resumo,
+        mock_conformidade,
+        mock_despacho,
+    ):
+        token = _create_test_user()
+
+        create_response = client.post(
+            "/api/v1/processos/",
+            json={"tipo": "requerimento"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        processo_id = create_response.json()["id"]
+
+        mock_resumo.return_value = {
+            "resumo": "Resumo automático",
+            "palavras_chave": ["teste"],
+        }
+        mock_conformidade.return_value = {
+            "conformidade_pct": 80.0,
+            "pendencias": ["Falta assinatura"],
+        }
+        mock_despacho.return_value = {
+            "despacho": "Regularize a documentação."
+        }
+
+        files = [
+            ("arquivos", (BytesIO(b"documento para analise"), "doc1.pdf")),
+            ("arquivos", (BytesIO(b"documento complementar"), "doc2.pdf")),
+        ]
+        data = {
+            "tipos_doc": ["requerimento", "cpf"]
+        }
+
+        upload_response = client.post(
+            f"/api/v1/processos/{processo_id}/documentos",
+            files=files,
+            data=data,
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert upload_response.status_code == 200
+
+        detail_response = client.get(
+            f"/api/v1/processos/{processo_id}",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert detail_response.status_code == 200
+        detail = detail_response.json()
+        assert detail["analise_status"] == "completed"
+        assert detail["resumo_ia"] == "Resumo automático"
+        assert detail["despacho_automatico"] == "Regularize a documentação."
+
+        start_response = client.post(
+            f"/api/v1/processos/{processo_id}/analise",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert start_response.status_code == 200
+        assert start_response.json()["analise_status"] == "completed"
+
+        assert mock_resumo.await_count == 1
+        assert mock_conformidade.await_count == 1
+        assert mock_despacho.await_count == 1
