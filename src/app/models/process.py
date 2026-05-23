@@ -130,6 +130,17 @@ class Process(Base):
         lazy="selectin",
     )
     
+    usuario = relationship(
+        "User",
+        lazy="joined"
+    )
+    
+    @property
+    def setor_remetente(self) -> str | None:
+        if getattr(self, "usuario", None):
+            return self.usuario.setor
+        return None
+    
     def __repr__(self) -> str:
         return f"<Processo {self.numero} - {self.status}>"
 

@@ -263,9 +263,8 @@ async def upload_documentos(
     await db.commit()
 
     background_tasks.add_task(
-        _analisar_ia_background,
-        processo_id=processo_id,
-        rag_client=rag_client,
+        AnaliseService.disparar_analise_em_background,
+        processo_id,
     )
     
     return {
@@ -320,17 +319,12 @@ async def update_status_processo(
     return ProcessoResponse.from_orm(processo)
 
 
-<<<<<<< HEAD
 @router.get("/{processo_id}/analise", response_model=AnaliseStatusResponse)
 async def get_status_analise(
-=======
-async def _analisar_ia_background(
->>>>>>> f93a0c9 (fix(processos): correct endpoint path and refactor document upload to sequential processing)
     processo_id: UUID,
     token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
 ):
-<<<<<<< HEAD
     """Retorna o status atual da análise automática do processo."""
 
     processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
@@ -352,45 +346,6 @@ async def _analisar_ia_background(
         checklist_ia=processo.checklist_ia,
         despacho_automatico=processo.despacho_automatico,
     )
-=======
-    """
-    Task de background para análise completa via RAG (super-rota).
-    Cria a própria sessão no banco para garantir que a conexão não seja fechada
-    pelo fim da requisição HTTP principal.
-    """
-    from app.core.database import _session_factory
-    import sys
-    print(f"==================================================")
-    print(f"[RAG BACKGROUND] Iniciando task para processo {processo_id}", flush=True)
-
-    try:
-        async with _session_factory() as db:
-            from app.models.process import StatusEnum
-            from app.models.documento import Documento
-            from sqlalchemy import select
-
-            # 1. Pega os metadados dos documentos do banco
-            stmt = select(Documento).where(Documento.processo_id == str(processo_id))
-            result = await db.execute(stmt)
-            documentos = result.scalars().all()
-
-            if not documentos:
-                print("[RAG BACKGROUND] Nenhum documento encontrado no banco.", flush=True)
-                return
-
-            docs_para_envio = []
-            for doc in documentos:
-                try:
-                    with open(doc.caminho_arquivo, "rb") as f:
-                        conteudo = f.read()
-                    docs_para_envio.append((conteudo, doc.nome_arquivo))
-                except Exception as e:
-                    print(f"[RAG BACKGROUND] Erro lendo arquivo {doc.nome_arquivo}: {e}", flush=True)
->>>>>>> f93a0c9 (fix(processos): correct endpoint path and refactor document upload to sequential processing)
-
-            if not docs_para_envio:
-                print("[RAG BACKGROUND] Falha ao ler o binário dos documentos no disco.", flush=True)
-                return
 
 <<<<<<< HEAD
 @router.post("/{processo_id}/analise", response_model=AnaliseStatusResponse)
