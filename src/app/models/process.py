@@ -74,6 +74,12 @@ class Process(Base):
         default=StatusEnum.AGUARDANDO_ANALISE,
         index=True,
     )
+    analise_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=AnaliseStatusEnum.PENDING.value,
+        index=True,
+    )
     resumo_ia: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,

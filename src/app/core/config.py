@@ -28,9 +28,9 @@ class Settings(BaseSettings):
     # PostgreSQL
     # =========================================================================
 
-    postgres_user: str = Field(alias="POSTGRES_USER")
-    postgres_password: str = Field(alias="POSTGRES_PASSWORD")
-    postgres_db: str = Field(alias="POSTGRES_DB")
+    postgres_user: str | None = Field(default=None, alias="POSTGRES_USER")
+    postgres_password: str | None = Field(default=None, alias="POSTGRES_PASSWORD")
+    postgres_db: str | None = Field(default=None, alias="POSTGRES_DB")
 
     database_url: str = Field(alias="DATABASE_URL")
 
