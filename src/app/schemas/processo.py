@@ -5,7 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from  app.schemas.documento import DocumentoResponse
+from app.schemas.documento import DocumentoResponse
+
 
 class ProcessoCreate(BaseModel):
     """Schema para criação de processo."""
@@ -17,23 +18,28 @@ class ProcessoCreate(BaseModel):
         "outros"
     ]
 
+
 class ProcessoResumo(BaseModel):
     """Schema resumido de processo (para listagem)."""
-    
+
     id: UUID
     numero: str
     tipo: str
     status: str
+<<<<<<< HEAD
     analise_status: str
+=======
+    setor_remetente: str | None = None
+>>>>>>> 4cb46e6 (fix(processo): clean up formatting and improve docstring for ProcessoResponse schema)
     criado_em: datetime
     atualizado_em: datetime
-    
+
     model_config = {"from_attributes": True}
 
 
 class ProcessoResponse(BaseModel):
-    """Schema completo de processo com documentos."""
-    
+    """Schema completo de processo com documentos e resultado da IA."""
+
     id: UUID
     numero: str
     tipo: str
