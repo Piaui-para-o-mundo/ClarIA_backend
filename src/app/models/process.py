@@ -29,6 +29,13 @@ class StatusEnum(str, pyEnum):
     REPROVADO = "reprovado"
 
 
+class AnaliseStatusEnum(str, pyEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
 class Process(Base):
     """
     Processo de requerimento.
@@ -66,6 +73,36 @@ class Process(Base):
         nullable=False,
         default=StatusEnum.AGUARDANDO_ANALISE,
         index=True,
+    )
+    analise_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=AnaliseStatusEnum.PENDING.value,
+        index=True,
+    )
+    analise_started_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    analise_concluida_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    analise_erro: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    analise_log: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    resumo_ia: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    checklist_ia: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
     )
     despacho_automatico: Mapped[str | None] = mapped_column(
         Text,
