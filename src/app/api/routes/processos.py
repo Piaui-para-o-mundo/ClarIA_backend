@@ -19,16 +19,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_role
-from app.models.user import User
+from app.core.dependencies import get_current_user
 from app.schemas.processo import (
+    AnaliseStatusResponse,
     ProcessoCreate,
     ProcessoResponse,
     ProcessoResumo,
 )
 
+from app.models.process import AnaliseStatusEnum, StatusEnum
+from app.services.analise_service import AnaliseService
 from app.services.processo_service import ProcessoService
-from app.services.rag_service import RagClient, get_rag_client
 
 router = APIRouter(prefix="/api/v1/processos", tags=["processos"])
 bearer_scheme = HTTPBearer()
@@ -156,7 +157,6 @@ async def upload_documentos(
     arquivos: list[UploadFile] = File(...),
     tipos_doc: list[str] = Form(...),
     db: AsyncSession = Depends(get_db),
-    rag_client: RagClient = Depends(get_rag_client),
 ):
     """
     Upload de múltiplos documentos para um processo com suporte a paralelismo.
@@ -252,17 +252,22 @@ async def upload_documentos(
     # Conta sucessos e falhas
     sucesso = sum(1 for r in resultados if r["sucesso"])
     falhas = len(resultados) - sucesso
+
+    if sucesso > 0:
+        await ProcessoService.update_status(
+            db=db,
+            processo_id=processo_id,
+            novo_status=StatusEnum.ANALISE_PENDENTE,
+        )
     
     # Commit no banco
     await db.commit()
 
-    # Dispara background task para verificar conformidade
-    background_tasks.add_task(
-        _verificar_conformidade_background,
-        db=db,
-        processo_id=processo_id,
-        rag_client=rag_client,
-    )
+    if sucesso > 0:
+        background_tasks.add_task(
+            AnaliseService.disparar_analise_em_background,
+            processo_id,
+        )
     
     return {
         "sucesso": sucesso,
@@ -316,61 +321,83 @@ async def update_status_processo(
     return ProcessoResponse.from_orm(processo)
 
 
-async def _verificar_conformidade_background(
-    db: AsyncSession,
+@router.get("/{processo_id}/analise", response_model=AnaliseStatusResponse)
+async def get_status_analise(
     processo_id: UUID,
-    rag_client: RagClient,
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Task de background para verificar conformidade via RAG.
-    
-    Args:
-        db: Sessão de banco.
-        processo_id: ID do processo.
-        rag_client: Cliente RAG.
-    """
-    try:
-        from app.models.process import StatusEnum
+    """Retorna o status atual da análise automática do processo."""
 
-        texto = await ProcessoService.get_documentos_text_concatenado(db=db, processo_id=processo_id)
-
-        if not texto:
-            return
-        
-        result = await rag_client.verificar_conformidade(
-            texto_documento=texto,
-            tipo_processo="tipo_processo",
+    processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
+    if not processo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Processo não encontrado",
         )
 
-        conformidade = result.get("conformidade_pct", 0)
-        pendencias = result.get("pendencias", [])
+    return AnaliseStatusResponse(
+        processo_id=processo.id,
+        analise_status=processo.analise_status,
+        status=processo.status,
+        analise_started_em=processo.analise_started_em,
+        analise_concluida_em=processo.analise_concluida_em,
+        analise_erro=processo.analise_erro,
+        analise_log=processo.analise_log,
+        resumo_ia=processo.resumo_ia,
+        checklist_ia=processo.checklist_ia,
+        despacho_automatico=processo.despacho_automatico,
+    )
 
 
-        if conformidade < 100:
-            despacho = await rag_client.sugerir_despacho(
-                texto_documento=texto,
-                pendencias=", ".join(pendencias),
-            )
-            
-            await ProcessoService.save_despacho_automatico(
-                db=db,
-                processo_id=processo_id,
-                despacho=despacho.get("despacho", ""),
-            )
-            
-            await ProcessoService.update_status(
-                db=db,
-                processo_id=processo_id,
-                novo_status=StatusEnum.PENDENTE_PROFESSOR,
-            )
-        else:
-            await ProcessoService.update_status(
-                db=db,
-                processo_id=processo_id,
-                novo_status=StatusEnum.ANALISE_PENDENTE,
-            )
-        
-        await db.commit()
-    except Exception as e:
-        print(f"Erro em background task: {e}")
-        
+@router.post("/{processo_id}/analise", response_model=AnaliseStatusResponse)
+async def iniciar_analise_processo(
+    processo_id: UUID,
+    background_tasks: BackgroundTasks,
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    db: AsyncSession = Depends(get_db),
+):
+    """Dispara a análise automática sem duplicar execuções."""
+
+    processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
+    if not processo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Processo não encontrado",
+        )
+
+    if processo.analise_status in {
+        AnaliseStatusEnum.PROCESSING.value,
+        AnaliseStatusEnum.COMPLETED.value,
+    }:
+        return AnaliseStatusResponse(
+            processo_id=processo.id,
+            analise_status=processo.analise_status,
+            status=processo.status,
+            analise_started_em=processo.analise_started_em,
+            analise_concluida_em=processo.analise_concluida_em,
+            analise_erro=processo.analise_erro,
+            analise_log=processo.analise_log,
+            resumo_ia=processo.resumo_ia,
+            checklist_ia=processo.checklist_ia,
+            despacho_automatico=processo.despacho_automatico,
+        )
+
+    background_tasks.add_task(
+        AnaliseService.disparar_analise_em_background,
+        processo_id,
+    )
+
+    return AnaliseStatusResponse(
+        processo_id=processo.id,
+        analise_status=AnaliseStatusEnum.PENDING.value,
+        status=processo.status,
+        analise_started_em=processo.analise_started_em,
+        analise_concluida_em=processo.analise_concluida_em,
+        analise_erro=processo.analise_erro,
+        analise_log=processo.analise_log,
+        resumo_ia=processo.resumo_ia,
+        checklist_ia=processo.checklist_ia,
+        despacho_automatico=processo.despacho_automatico,
+    )
+
