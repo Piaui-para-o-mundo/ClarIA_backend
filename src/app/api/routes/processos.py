@@ -66,7 +66,7 @@ async def criar_processo(
     return ProcessoResponse.from_orm(processo)
 
 
-@router.get("", response_model=list[ProcessoResumo])
+@router.get("/", response_model=list[ProcessoResumo])
 async def listar_processos(
     token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     skip: int = 0,
@@ -241,13 +241,12 @@ async def upload_documentos(
             # Fecha arquivo
             await arquivo.close()
     
-    # Executa upload de todos os documentos em paralelo
-    tasks = [
-        processar_documento(arquivo, tipo, idx)
-        for idx, (arquivo, tipo) in enumerate(zip(arquivos, tipos_doc))
-    ]
-    
-    resultados = await asyncio.gather(*tasks)
+    # Executa upload de todos os documentos de forma sequencial
+    # (Evita o SAWarning de concorrência na mesma sessão do banco de dados)
+    resultados = []
+    for idx, (arquivo, tipo) in enumerate(zip(arquivos, tipos_doc)):
+        res = await processar_documento(arquivo, tipo, idx)
+        resultados.append(res)
     
     # Conta sucessos e falhas
     sucesso = sum(1 for r in resultados if r["sucesso"])
@@ -263,11 +262,11 @@ async def upload_documentos(
     # Commit no banco
     await db.commit()
 
-    if sucesso > 0:
-        background_tasks.add_task(
-            AnaliseService.disparar_analise_em_background,
-            processo_id,
-        )
+    background_tasks.add_task(
+        _analisar_ia_background,
+        processo_id=processo_id,
+        rag_client=rag_client,
+    )
     
     return {
         "sucesso": sucesso,
@@ -321,12 +320,17 @@ async def update_status_processo(
     return ProcessoResponse.from_orm(processo)
 
 
+<<<<<<< HEAD
 @router.get("/{processo_id}/analise", response_model=AnaliseStatusResponse)
 async def get_status_analise(
+=======
+async def _analisar_ia_background(
+>>>>>>> f93a0c9 (fix(processos): correct endpoint path and refactor document upload to sequential processing)
     processo_id: UUID,
     token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
 ):
+<<<<<<< HEAD
     """Retorna o status atual da análise automática do processo."""
 
     processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
@@ -348,8 +352,47 @@ async def get_status_analise(
         checklist_ia=processo.checklist_ia,
         despacho_automatico=processo.despacho_automatico,
     )
+=======
+    """
+    Task de background para análise completa via RAG (super-rota).
+    Cria a própria sessão no banco para garantir que a conexão não seja fechada
+    pelo fim da requisição HTTP principal.
+    """
+    from app.core.database import _session_factory
+    import sys
+    print(f"==================================================")
+    print(f"[RAG BACKGROUND] Iniciando task para processo {processo_id}", flush=True)
 
+    try:
+        async with _session_factory() as db:
+            from app.models.process import StatusEnum
+            from app.models.documento import Documento
+            from sqlalchemy import select
 
+            # 1. Pega os metadados dos documentos do banco
+            stmt = select(Documento).where(Documento.processo_id == str(processo_id))
+            result = await db.execute(stmt)
+            documentos = result.scalars().all()
+
+            if not documentos:
+                print("[RAG BACKGROUND] Nenhum documento encontrado no banco.", flush=True)
+                return
+
+            docs_para_envio = []
+            for doc in documentos:
+                try:
+                    with open(doc.caminho_arquivo, "rb") as f:
+                        conteudo = f.read()
+                    docs_para_envio.append((conteudo, doc.nome_arquivo))
+                except Exception as e:
+                    print(f"[RAG BACKGROUND] Erro lendo arquivo {doc.nome_arquivo}: {e}", flush=True)
+>>>>>>> f93a0c9 (fix(processos): correct endpoint path and refactor document upload to sequential processing)
+
+            if not docs_para_envio:
+                print("[RAG BACKGROUND] Falha ao ler o binário dos documentos no disco.", flush=True)
+                return
+
+<<<<<<< HEAD
 @router.post("/{processo_id}/analise", response_model=AnaliseStatusResponse)
 async def iniciar_analise_processo(
     processo_id: UUID,
@@ -401,3 +444,49 @@ async def iniciar_analise_processo(
         despacho_automatico=processo.despacho_automatico,
     )
 
+=======
+            # 2. Pega o tipo do processo para as regras do RAG
+            processo = await ProcessoService.get_processo(db=db, processo_id=str(processo_id))
+            if not processo:
+                print("[RAG BACKGROUND] Processo não encontrado na base de dados.", flush=True)
+                return
+
+            print(f"[RAG BACKGROUND] Enviando {len(docs_para_envio)} documentos para o ClarIA_RAG_IA (URL: {rag_client.base_url})...", flush=True)
+            
+            # 3. Manda tudo pra super-rota
+            result_ia = await rag_client.analisar_processo(
+                documentos=docs_para_envio,
+                tipo_processo=processo.tipo,
+            )
+            
+            print("[RAG BACKGROUND] Resposta do RAG recebida com sucesso!", flush=True)
+
+            # 4. Grava resultados
+            resumo = result_ia.get("resumo", {})
+            if resumo and "resultado" in resumo:
+                processo.resumo_ia = resumo["resultado"].get("resumo", "")
+            
+            import json
+            processo.checklist_ia = json.dumps(result_ia.get("checklist", {}), ensure_ascii=False)
+            
+            despacho_dict = result_ia.get("despacho", {})
+            if despacho_dict and "resultado" in despacho_dict:
+                processo.despacho_automatico = despacho_dict["resultado"]
+
+            # Se reprovado pelo checklist, fica pendente para professor ou para análise
+            checklist = result_ia.get("checklist", {})
+            if not checklist.get("aprovado", False):
+                processo.status = StatusEnum.PENDENTE_PROFESSOR
+            else:
+                processo.status = StatusEnum.ANALISE_PENDENTE
+
+            await db.commit()
+            print(f"[RAG BACKGROUND] Processo {processo_id} atualizado com análise IA com sucesso.", flush=True)
+
+    except Exception as e:
+        import traceback
+        print(f"[RAG BACKGROUND] Erro CRÍTICO em _analisar_ia_background: {e}", flush=True)
+        traceback.print_exc()
+        print(f"==================================================", flush=True)
+        
+>>>>>>> f93a0c9 (fix(processos): correct endpoint path and refactor document upload to sequential processing)
