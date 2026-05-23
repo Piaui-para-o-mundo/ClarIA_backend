@@ -19,16 +19,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_role
-from app.models.user import User
+from app.core.dependencies import get_current_user
 from app.schemas.processo import (
+    AnaliseStatusResponse,
     ProcessoCreate,
     ProcessoResponse,
     ProcessoResumo,
 )
 
+from app.models.process import AnaliseStatusEnum, StatusEnum
+from app.services.analise_service import AnaliseService
 from app.services.processo_service import ProcessoService
-from app.services.rag_service import RagClient, get_rag_client
 
 router = APIRouter(prefix="/api/v1/processos", tags=["processos"])
 bearer_scheme = HTTPBearer()
@@ -156,7 +157,6 @@ async def upload_documentos(
     arquivos: list[UploadFile] = File(...),
     tipos_doc: list[str] = Form(...),
     db: AsyncSession = Depends(get_db),
-    rag_client: RagClient = Depends(get_rag_client),
 ):
     """
     Upload de múltiplos documentos para um processo com suporte a paralelismo.
@@ -251,6 +251,13 @@ async def upload_documentos(
     # Conta sucessos e falhas
     sucesso = sum(1 for r in resultados if r["sucesso"])
     falhas = len(resultados) - sucesso
+
+    if sucesso > 0:
+        await ProcessoService.update_status(
+            db=db,
+            processo_id=processo_id,
+            novo_status=StatusEnum.ANALISE_PENDENTE,
+        )
     
     # Commit no banco
     await db.commit()
@@ -316,7 +323,8 @@ async def update_status_processo(
 
 async def _analisar_ia_background(
     processo_id: UUID,
-    rag_client: RagClient,
+    token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Task de background para análise completa via RAG (super-rota).

@@ -29,6 +29,13 @@ class StatusEnum(str, pyEnum):
     REPROVADO = "reprovado"
 
 
+class AnaliseStatusEnum(str, pyEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
 class Process(Base):
     """
     Processo de requerimento.
