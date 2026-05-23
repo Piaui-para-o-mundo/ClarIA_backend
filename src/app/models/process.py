@@ -67,6 +67,16 @@ class Process(Base):
         default=StatusEnum.AGUARDANDO_ANALISE,
         index=True,
     )
+    resumo_ia: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Resumo executivo gerado pelo serviço RAG",
+    )
+    checklist_ia: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Resultado do checklist determinístico (JSON)",
+    )
     despacho_automatico: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
@@ -92,6 +102,17 @@ class Process(Base):
         backref="processo",
         lazy="selectin",
     )
+    
+    usuario = relationship(
+        "User",
+        lazy="joined"
+    )
+    
+    @property
+    def setor_remetente(self) -> str | None:
+        if getattr(self, "usuario", None):
+            return self.usuario.setor
+        return None
     
     def __repr__(self) -> str:
         return f"<Processo {self.numero} - {self.status}>"
