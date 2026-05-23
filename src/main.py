@@ -51,8 +51,9 @@ def create_app() -> FastAPI:
             "http://localhost:5173",
             "http://localhost:3000",
             "http://localhost:8002",
+            "http://localhost:8001",
             "http://127.0.0.1:8002",
-            "http://0.0.0.0:8002",
+            "http://0.0.0.0:8001",
             "http://0.0.0.0:5000",
             "http://0.0.0.0:5500",
 
