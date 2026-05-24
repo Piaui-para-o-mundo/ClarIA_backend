@@ -291,15 +291,7 @@
 
     <div class="corpo">
       {% if corpo_despacho %}
-        {% set partes = corpo_despacho.split('\n\n') %}
-        {% if partes and partes[0].strip() %}
-          <p class="ref text-block">{{ partes[0] | e | trim }}</p>
-        {% endif %}
-        {% for parte in partes[1:] %}
-          {% if parte.strip() %}
-            <p class="text-block">{{ parte | e | trim }}</p>
-          {% endif %}
-        {% endfor %}
+        <div class="text-block">{{ corpo_despacho | e | replace('\n', '<br>') | safe }}</div>
       {% endif %}
     </div>
 
