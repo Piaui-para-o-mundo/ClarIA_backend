@@ -72,44 +72,47 @@ class AnaliseService:
         await db.flush()
 
         try:
-            texto_documento = await ProcessoService.get_documentos_text_concatenado(
-                db=db,
-                processo_id=processo_id,
-            )
+            documentos = processo.documentos
 
-            if not texto_documento.strip():
-                raise ValueError("Nenhum texto encontrado nos documentos para análise.")
+            if not documentos:
+                raise ValueError("Nenhum documento encontrado para análise.")
 
-            print(f"[ANALISE BACKGROUND] Chamando /ia/resumo para processo {processo_id}", flush=True)
-            AnaliseService._append_log(processo, "Enviando texto consolidado para a IA.")
-            resumo = await rag_client.gerar_resumo(texto_documento)
-            print(f"[ANALISE BACKGROUND] Chamando /ia/conformidade para processo {processo_id}", flush=True)
-            conformidade = await rag_client.verificar_conformidade(
-                texto_documento=texto_documento,
+            docs_para_rag = []
+            import os
+            for doc in documentos:
+                if doc.caminho_arquivo and os.path.exists(doc.caminho_arquivo):
+                    with open(doc.caminho_arquivo, "rb") as f:
+                        docs_para_rag.append((f.read(), doc.nome_arquivo))
+            
+            if not docs_para_rag:
+                raise ValueError("Não foi possível ler o conteúdo dos PDFs no disco.")
+
+            print(f"[ANALISE BACKGROUND] Chamando /ia/analisar para processo {processo_id}", flush=True)
+            AnaliseService._append_log(processo, "Enviando documentos físicos para a IA (RAG V2).")
+            
+            resposta_ia = await rag_client.analisar_processo(
+                documentos=docs_para_rag,
                 tipo_processo=processo.tipo,
             )
 
-            conformidade_pct = float(conformidade.get("conformidade_pct", 0) or 0)
-            pendencias = conformidade.get("pendencias", []) or []
-            processo.resumo_ia = resumo.get("resumo") or json.dumps(resumo, ensure_ascii=False)
-            processo.checklist_ia = json.dumps(conformidade, ensure_ascii=False)
-
+            # Nova estrutura de resposta da ClarIA RAG
+            checklist = resposta_ia.get("checklist", {})
+            despacho = resposta_ia.get("despacho", {})
+            
+            conformidade_pct = float(checklist.get("conformidade_pct", 0) or 0)
+            
+            processo.resumo_ia = resposta_ia.get("resumo")
+            processo.checklist_ia = json.dumps(resposta_ia, ensure_ascii=False)
+            
             if conformidade_pct < 100:
-                print(f"[ANALISE BACKGROUND] Chamando /ia/despacho para processo {processo_id}", flush=True)
-                despacho = await rag_client.sugerir_despacho(
-                    texto_documento=texto_documento,
-                    pendencias=", ".join(map(str, pendencias)),
-                )
-                processo.despacho_automatico = despacho.get("despacho") or json.dumps(
-                    despacho,
-                    ensure_ascii=False,
-                )
+                processo.despacho_automatico = despacho.get("corpo_despacho")
                 processo.status = StatusEnum.PENDENTE_PROFESSOR
                 AnaliseService._append_log(
                     processo,
                     f"Conformidade parcial ({conformidade_pct:.2f}%). Despacho sugerido gerado.",
                 )
             else:
+                processo.despacho_automatico = despacho.get("corpo_despacho")
                 processo.status = StatusEnum.ANALISE_PENDENTE
                 AnaliseService._append_log(
                     processo,
