@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.models.process import StatusEnum
+from app.models.process import AnaliseStatusEnum, StatusEnum
 from app.services.processo_service import ProcessoService
 
 router = APIRouter(prefix="/api/v1/analise", tags=["analise"])
@@ -51,17 +51,34 @@ async def get_resultado_ia(
             detail="Processo não encontrado",
         )
 
+    analise_status = processo.analise_status or AnaliseStatusEnum.PENDING.value
+
+    if analise_status == AnaliseStatusEnum.ERROR.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "mensagem": "A análise de IA falhou para este processo.",
+                "analise_status": analise_status,
+                "analise_erro": processo.analise_erro,
+            },
+        )
+
     # IA ainda não terminou (background task em andamento)
     if not processo.resumo_ia and not processo.checklist_ia:
         raise HTTPException(
             status_code=status.HTTP_202_ACCEPTED,
-            detail="Análise de IA ainda em processamento. Tente novamente em alguns instantes.",
+            detail={
+                "mensagem": "Análise de IA ainda em processamento. Tente novamente em alguns instantes.",
+                "analise_status": analise_status,
+            },
         )
 
     return {
         "processo_id": str(processo.id),
         "numero": processo.numero,
         "status": processo.status,
+        "analise_status": analise_status,
+        "analise_erro": processo.analise_erro,
         "resumo_ia": processo.resumo_ia,
         "checklist_ia": processo.checklist_ia,
         "despacho_automatico": processo.despacho_automatico,
