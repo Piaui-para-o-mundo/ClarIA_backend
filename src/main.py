@@ -3,6 +3,7 @@
 Ponto de entrada da API, configuração inicial e roteamento.
 """
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,6 +37,8 @@ def create_app() -> FastAPI:
     """
 
     settings = get_settings()
+    uploads_dir = Path("uploads")
+    uploads_dir.mkdir(parents=True, exist_ok=True)
 
     app = FastAPI(
         title="ClarIA Backend",
@@ -77,7 +80,7 @@ def create_app() -> FastAPI:
         """Health check endpoint. """
         return {"status": "ok", "environment": settings.environment}
 
-    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
     app.include_router(auth.router)
     app.include_router(processos.router)
