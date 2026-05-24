@@ -115,6 +115,7 @@
     font-size: 11pt;
     line-height: 1.65;
     margin-bottom: 10mm;
+    width: 100%;
   }
 
   .corpo .text-block {
@@ -126,19 +127,23 @@
     margin-bottom: 4mm;
     font-weight: normal;
     text-indent: 0;
+    margin-left: 0;
+    margin-right: 0;
     white-space: pre-line;
   }
 
   .corpo p {
     text-align: justify;
-    text-indent: 14mm;
+    text-indent: 0;
+    margin-left: 0;
+    margin-right: 0;
     margin-bottom: 4mm;
     white-space: pre-line;
   }
 
   .corpo ol {
-    margin: 0 0 4mm 14mm;
-    padding-left: 5mm;
+    margin: 0 0 4mm 0;
+    padding-left: 9mm;
     padding-right: 2mm;
     text-align: justify;
     line-height: 1.65;
@@ -148,7 +153,7 @@
   .corpo ol li {
     margin-bottom: 4mm;
     text-align: justify;
-    padding-left: 1mm;
+    padding-left: 0;
   }
 
   .corpo p:last-child,
@@ -289,7 +294,7 @@
 
     <div class="corpo">
       {% if corpo_despacho %}
-        {% set partes = corpo_despacho.split('\n\n') %}
+        {% set partes = corpo_despacho.split('\n') %}
         {% if partes and partes[0].strip() %}
           <p class="ref text-block">{{ partes[0] | e | trim }}</p>
         {% endif %}
