@@ -86,16 +86,28 @@ class RagClient:
         Retorna dict com:
         - resumo: {status, modulo, arquivos_analisados, resultado: {...}}
         """
-        response = await self.client.post(
-            f"{self.base_url}/ia/resumo",
-            json={
-                "texto": "",  # Campo legado, não usado na nova arquitetura
-                "tipo_processo": tipo_processo,
-                "textos_extraidos": textos_extraidos,
-            },
-        )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/ia/resumo",
+                json={
+                    "texto": "",  # Campo legado, não usado na nova arquitetura
+                    "tipo_processo": tipo_processo,
+                    "textos_extraidos": textos_extraidos,
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 422 and textos_extraidos:
+                # Fallback: Junta tudo em uma string para a rota legada
+                texto_legado = "\n".join([f"{t.get('nome', '')}\n{t.get('texto', '')}".strip() for t in textos_extraidos])
+                resp_legado = await self.client.post(
+                    f"{self.base_url}/ia/resumo",
+                    json={"texto": texto_legado}
+                )
+                resp_legado.raise_for_status()
+                return resp_legado.json()
+            raise
 
     async def sugerir_despacho(
         self,
@@ -129,15 +141,29 @@ class RagClient:
         else:
             pendencias_str = "Nenhuma pendência identificada."
 
-        response = await self.client.post(
-            f"{self.base_url}/ia/despacho",
-            json={
-                "texto": texto,
-                "pendencias": pendencias_str,
-            },
-        )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/ia/despacho",
+                json={
+                    "texto": texto,
+                    "pendencias": pendencias_str,
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 422:
+                # Fallback: modelo legado do /ia/despacho
+                resp_legado = await self.client.post(
+                    f"{self.base_url}/ia/despacho",
+                    json={
+                        "texto": resumo_texto,
+                        "pendencias": "\n".join(pendencias_list) if pendencias_list else "",
+                    }
+                )
+                resp_legado.raise_for_status()
+                return resp_legado.json()
+            raise
 
     async def analisar_processo(
         self,
