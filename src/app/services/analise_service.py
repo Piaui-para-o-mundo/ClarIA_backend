@@ -147,9 +147,17 @@ class AnaliseService:
             f"[ANALISE BACKGROUND] Iniciando processo {processo_id} via {settings.rag_service_url}",
             flush=True,
         )
+        print(
+            f"[ANALISE BACKGROUND] Task recebida e sessão de análise aberta para processo {processo_id}",
+            flush=True,
+        )
 
         async with session_factory() as db:
             try:
+                print(
+                    f"[ANALISE BACKGROUND] Executando análise automática do processo {processo_id}",
+                    flush=True,
+                )
                 await AnaliseService.executar_analise_automatica(
                     db=db,
                     processo_id=processo_id,

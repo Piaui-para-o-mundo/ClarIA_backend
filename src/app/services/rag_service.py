@@ -55,7 +55,7 @@ class RagClient:
         """Solicita resumo de texto ao servico de IA."""
         response = await self.client.post(
             f"{self.base_url}/ia/resumo",
-            json={"texto_documento": texto_documento},
+            json={"texto": texto_documento},
         )
         response.raise_for_status()
         return response.json()
@@ -69,7 +69,7 @@ class RagClient:
         response = await self.client.post(
             f"{self.base_url}/ia/conformidade",
             json={
-                "texto_documento": texto_documento,
+                "texto": texto_documento,
                 "tipo_processo": tipo_processo,
             },
         )
@@ -81,7 +81,7 @@ class RagClient:
         response = await self.client.post(
             f"{self.base_url}/ia/despacho",
             json={
-                "texto_documento": texto_documento,
+                "texto": texto_documento,
                 "pendencias": pendencias,
             },
         )

@@ -266,6 +266,11 @@ async def upload_documentos(
         AnaliseService.disparar_analise_em_background,
         processo_id,
     )
+
+    print(
+        f"[ANALISE BACKGROUND] Análise enfileirada após upload para processo {processo_id}",
+        flush=True,
+    )
     
     return {
         "sucesso": sucesso,
@@ -382,6 +387,11 @@ async def iniciar_analise_processo(
     background_tasks.add_task(
         AnaliseService.disparar_analise_em_background,
         processo_id,
+    )
+
+    print(
+        f"[ANALISE BACKGROUND] Análise manual enfileirada para processo {processo_id}",
+        flush=True,
     )
 
     return AnaliseStatusResponse(
