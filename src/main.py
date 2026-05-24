@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.database import close_db, init_db
-from app.api.routes import auth, processos, analise
+from app.api.routes import auth, processos, analise, dispatch
 
 
 @asynccontextmanager
@@ -85,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(processos.router)
     app.include_router(analise.router)
+    app.include_router(dispatch.router)
 
     return app
 
