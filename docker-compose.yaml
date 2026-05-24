@@ -1,34 +1,54 @@
-version: "3.9"
+
+version: '3.8'
 
 services:
-  api:
-    build: .
-    container_name: fastapi_app
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./src:/app
-    environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=appdb
-    depends_on:
-      - db
-
   db:
-    image: postgres:16
-    container_name: postgres_db
-    restart: always
+    image: postgres:16-alpine
+    container_name: claria_db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: appdb
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-claria_db}
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - claria_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: claria_backend
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-claria_db}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      RAG_SERVICE_URL: ${RAG_SERVICE_URL:-http://host.docker.internal:8001}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DEBUG: ${DEBUG:-true}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/app
+      - uploads:/app/uploads
+    networks:
+      - claria_network
 
 volumes:
-  pgdata:
+  postgres_data:
+  uploads:
+
+networks:
+  claria_network:
+    driver: bridge

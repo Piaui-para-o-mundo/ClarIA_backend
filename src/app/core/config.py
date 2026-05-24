@@ -1,42 +1,89 @@
 """
 Configuração centralizada da aplicação.
-
-Carrega e valida variáveis de ambiente usando dotenv.
 """
 
-import os
-from dotenv import load_dotenv
+from functools import lru_cache
+from typing import Literal
 
-# Carregar variáveis de ambiente apenas uma vez
-load_dotenv()
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings:
-    """Configurações da aplicação com valores padrão."""
+class Settings(BaseSettings):
+    """Configurações da aplicação."""
 
-    # Banco de dados
-    DB_USER: str = os.getenv("DB_USER", "postgres")
-    DB_PASSWORD: str = os.getenv("DB_PASSWORD", "postgres")
-    DB_HOST: str = os.getenv("DB_HOST", "localhost")
-    DB_PORT: str = os.getenv("DB_PORT", "5432")
-    DB_NAME: str = os.getenv("DB_NAME", "appdb")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
+    # =========================================================================
+    # Aplicação
+    # =========================================================================
+
+    app_name: str = "ClarIA"
+
+    # =========================================================================
+    # PostgreSQL
+    # =========================================================================
+
+    postgres_user: str | None = Field(default=None, alias="POSTGRES_USER")
+    postgres_password: str | None = Field(default=None, alias="POSTGRES_PASSWORD")
+    postgres_db: str | None = Field(default=None, alias="POSTGRES_DB")
+
+    database_url: str = Field(alias="DATABASE_URL")
+
+    # =========================================================================
     # API
-    API_PORT: int = int(os.getenv("API_PORT", "8000"))
-    API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
+    # =========================================================================
 
-    @property
-    def database_url(self) -> str:
-        """
-        Constrói a URL de conexão com o banco de dados.
+    api_port: int = Field(default=8000, alias="API_PORT")
+    api_host: str = Field(default="0.0.0.0", alias="API_HOST")
 
-        Returns:
-            str: URL de conexão PostgreSQL formatada.
-        """
-        return (
-            f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}"
-            f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        )
+    # =========================================================================
+    # Segurança
+    # =========================================================================
+
+    secret_key: str = Field(alias="SECRET_KEY")
+
+    algorithm: str = Field(
+        default="HS256",
+        alias="ALGORITHM",
+    )
+
+    access_token_expire_minutes: int = Field(
+        default=60,
+        alias="ACCESS_TOKEN_EXPIRE_MINUTES",
+    )
+
+    # =========================================================================
+    # Serviços
+    # =========================================================================
+
+    rag_service_url: str = Field(
+        default="http://rag:8001",
+        alias="RAG_SERVICE_URL",
+    )
+
+    rag_service_timeout: int = Field(
+        default=120,
+        alias="RAG_SERVICE_TIMEOUT",
+    )
+
+    # =========================================================================
+    # Ambiente
+    # =========================================================================
+
+    environment: Literal["development", "staging", "production"] = Field(
+        default="development",
+        alias="ENVIRONMENT",
+    )
+
+    debug: bool = Field(default=False, alias="DEBUG")
 
 
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+    """Retorna as configurações da aplicação."""
+    return Settings()
