@@ -87,8 +87,8 @@ class AnaliseService:
             if not docs_para_rag:
                 raise ValueError("Não foi possível ler o conteúdo dos PDFs no disco.")
 
-            print(f"[ANALISE BACKGROUND] Chamando /ia/analisar para processo {processo_id}", flush=True)
-            AnaliseService._append_log(processo, "Enviando documentos físicos para a IA (RAG V2).")
+            print(f"[ANALISE BACKGROUND] Chamando fluxo novo do RAG para processo {processo_id}", flush=True)
+            AnaliseService._append_log(processo, "Enviando PDFs para /ia/conformidade e reutilizando os textos extraídos.")
             
             resposta_ia = await rag_client.analisar_processo(
                 documentos=docs_para_rag,
@@ -98,13 +98,18 @@ class AnaliseService:
             # Nova estrutura de resposta da ClarIA RAG
             checklist = resposta_ia.get("checklist", {})
             despacho = resposta_ia.get("despacho", {})
-            
-            conformidade_pct = float(checklist.get("conformidade_pct", 0) or 0)
+
+            aprovado = bool(checklist.get("aprovado"))
+            conformidade_pct = checklist.get("conformidade_pct")
+            if conformidade_pct is None:
+                conformidade_pct = 100.0 if aprovado else 0.0
+            else:
+                conformidade_pct = float(conformidade_pct or 0)
             
             processo.resumo_ia = resposta_ia.get("resumo")
             processo.checklist_ia = json.dumps(resposta_ia, ensure_ascii=False)
             
-            if conformidade_pct < 100:
+            if not aprovado or conformidade_pct < 100:
                 processo.despacho_automatico = despacho.get("corpo_despacho")
                 processo.status = StatusEnum.PENDENTE_PROFESSOR
                 AnaliseService._append_log(

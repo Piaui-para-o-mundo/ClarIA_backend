@@ -25,13 +25,13 @@ app = create_app()
 client = TestClient(app)
 
 
-def _create_test_user(email="professor@example.com"):
+def _create_test_user(email="professor@example.com", role="professor"):
     """Helper para criar usuário de teste."""
     payload = {
         "nome": "Professor Teste",
         "email": email,
         "senha": "senha_123",
-        "role": "professor",
+        "role": role,
         "setor": "Educação"
     }
     client.post("/api/v1/auth/register", json=payload)
@@ -293,3 +293,62 @@ class TestFluxoCompleto:
             headers={"Authorization": f"Bearer {token}"}
         )
         assert get_response.status_code == 200
+
+    @patch("app.services.rag_service.RagClient.analisar_processo", new_callable=AsyncMock)
+    def test_reanalise_ignora_despacho_salvo(self, mock_analisar):
+        """Deve ignorar documentos de despacho gerados pelo sistema na próxima análise."""
+        professor_token = _create_test_user(email="professor.despacho@example.com", role="professor")
+        avaliador_token = _create_test_user(email="avaliador.despacho@example.com", role="avaliador")
+
+        mock_analisar.return_value = {
+            "resumo": "Resumo automático",
+            "checklist": {"conformidade_pct": 80.0},
+            "despacho": {"corpo_despacho": "Despacho automático"},
+        }
+
+        create_response = client.post(
+            "/api/v1/processos/",
+            json={"tipo": "requerimento"},
+            headers={"Authorization": f"Bearer {professor_token}"}
+        )
+        assert create_response.status_code == 200
+        processo_id = create_response.json()["id"]
+
+        upload_response = client.post(
+            f"/api/v1/processos/{processo_id}/documentos",
+            files=[
+                ("arquivos", (BytesIO(b"documento 1"), "doc1.pdf")),
+                ("arquivos", (BytesIO(b"documento 2"), "doc2.pdf")),
+            ],
+            data={"tipos_doc": ["requerimento", "cpf"]},
+            headers={"Authorization": f"Bearer {professor_token}"}
+        )
+        assert upload_response.status_code == 200
+
+        dispatch_response = client.post(
+            f"/api/v1/dispatch/send/{processo_id}",
+            json={
+                "setor_destino_sugerido": "CPPD",
+                "assunto": "Progressão Funcional",
+                "corpo_despacho": "Texto do despacho",
+                "justificativa_encaminhamento": "Complementação necessária",
+                "status_sugerido": "devolvido",
+                "referencias_normativas": [],
+            },
+            headers={"Authorization": f"Bearer {avaliador_token}"}
+        )
+        assert dispatch_response.status_code == 200
+
+        second_upload = client.post(
+            f"/api/v1/processos/{processo_id}/documentos",
+            files=[("arquivos", (BytesIO(b"documento 3"), "doc3.pdf"))],
+            data={"tipos_doc": ["recurso"]},
+            headers={"Authorization": f"Bearer {professor_token}"}
+        )
+        assert second_upload.status_code == 200
+
+        assert mock_analisar.await_count == 2
+        second_call_docs = mock_analisar.await_args_list[1].kwargs["documentos"]
+        second_call_filenames = [nome for _, nome in second_call_docs]
+        assert len(second_call_filenames) == 3
+        assert all(not nome.startswith("Despacho_") for nome in second_call_filenames)
