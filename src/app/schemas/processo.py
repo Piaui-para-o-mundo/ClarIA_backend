@@ -39,6 +39,8 @@ class ProcessoResponse(BaseModel):
     numero: str
     tipo: str
     status: str
+    analise_status: str | None = None
+    analise_erro: str | None = None
     usuario_id: UUID
     setor_remetente: str | None = None
     # Resultado da análise automática pelo RAG (preenchido pelo BackgroundTask)
