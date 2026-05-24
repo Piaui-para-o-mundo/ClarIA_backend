@@ -96,8 +96,8 @@ class AnaliseService:
             )
 
             # Nova estrutura de resposta da ClarIA RAG
+            # O RagClient já garante que "resumo" e "despacho" são STRINGS
             checklist = resposta_ia.get("checklist", {})
-            despacho = resposta_ia.get("despacho", {})
 
             aprovado = bool(checklist.get("aprovado"))
             conformidade_pct = checklist.get("conformidade_pct")
@@ -106,18 +106,27 @@ class AnaliseService:
             else:
                 conformidade_pct = float(conformidade_pct or 0)
             
-            processo.resumo_ia = resposta_ia.get("resumo")
+            # resumo e despacho já vêm como str do RagClient
+            resumo_str = resposta_ia.get("resumo", "")
+            despacho_str = resposta_ia.get("despacho", "")
+            
+            # Segurança extra: se ainda vier dict por algum motivo, converter
+            if not isinstance(resumo_str, str):
+                resumo_str = json.dumps(resumo_str, ensure_ascii=False, indent=2)
+            if not isinstance(despacho_str, str):
+                despacho_str = json.dumps(despacho_str, ensure_ascii=False, indent=2)
+            
+            processo.resumo_ia = resumo_str
             processo.checklist_ia = json.dumps(resposta_ia, ensure_ascii=False)
+            processo.despacho_automatico = despacho_str
             
             if not aprovado or conformidade_pct < 100:
-                processo.despacho_automatico = despacho.get("corpo_despacho")
                 processo.status = StatusEnum.PENDENTE_PROFESSOR
                 AnaliseService._append_log(
                     processo,
                     f"Conformidade parcial ({conformidade_pct:.2f}%). Despacho sugerido gerado.",
                 )
             else:
-                processo.despacho_automatico = despacho.get("corpo_despacho")
                 processo.status = StatusEnum.ANALISE_PENDENTE
                 AnaliseService._append_log(
                     processo,
