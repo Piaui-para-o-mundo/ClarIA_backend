@@ -67,6 +67,7 @@ class ProcessoService:
             usuario_id=user.id,
             tipo=tipo,
             status=StatusEnum.AGUARDANDO_DOCUMENTOS,
+            analise_status="pending",
         )
 
         db.add(processo)
