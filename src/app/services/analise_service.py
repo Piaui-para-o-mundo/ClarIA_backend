@@ -71,47 +71,54 @@ class AnaliseService:
         AnaliseService._append_log(processo, "Análise automática iniciada.")
         await db.flush()
 
-        import os
-
-        # Lê os arquivos do disco para enviar ao RAG
-        arquivos_para_enviar = []
-        for doc in processo.documentos:
-            caminho_real = f"/app/{doc.caminho_arquivo}"
-            try:
-                if os.path.exists(caminho_real):
-                    with open(caminho_real, "rb") as f:
-                        conteudo = f.read()
-                        arquivos_para_enviar.append((conteudo, doc.nome_arquivo))
-            except Exception as e:
-                AnaliseService._append_log(processo, f"Erro ao ler arquivo {doc.nome_arquivo}: {e}")
-
-        if not arquivos_para_enviar:
-            processo.analise_status = AnaliseStatusEnum.ERROR.value
-            processo.analise_erro = "Nenhum arquivo encontrado no disco para análise."
-            processo.analise_concluida_em = datetime.now(timezone.utc)
-            AnaliseService._append_log(processo, processo.analise_erro)
-            await db.flush()
-            return processo
-
         try:
-            print(f"[RAG BACKGROUND] Enviando {len(arquivos_para_enviar)} documentos para a IA...")
-            AnaliseService._append_log(processo, f"Enviando {len(arquivos_para_enviar)} documentos para a IA...")
-            
-            # Chama a super-rota da IA que faz tudo de uma vez
-            resposta_ia = await rag_client.analisar_processo(
-                documentos=arquivos_para_enviar,
+            texto_documento = await ProcessoService.get_documentos_text_concatenado(
+                db=db,
+                processo_id=processo_id,
+            )
+
+            if not texto_documento.strip():
+                raise ValueError("Nenhum texto encontrado nos documentos para análise.")
+
+            print(f"[ANALISE BACKGROUND] Chamando /ia/resumo para processo {processo_id}", flush=True)
+            AnaliseService._append_log(processo, "Enviando texto consolidado para a IA.")
+            resumo = await rag_client.gerar_resumo(texto_documento)
+            print(f"[ANALISE BACKGROUND] Chamando /ia/conformidade para processo {processo_id}", flush=True)
+            conformidade = await rag_client.verificar_conformidade(
+                texto_documento=texto_documento,
                 tipo_processo=processo.tipo,
             )
 
-            # O RAG retorna um objeto completo, que salvamos no checklist e resumo
-            processo.checklist_ia = json.dumps(resposta_ia, ensure_ascii=False)
-            
-            # Atualizamos o status do processo para pendente professor, já que a IA terminou
-            processo.status = StatusEnum.PENDENTE_PROFESSOR
+            conformidade_pct = float(conformidade.get("conformidade_pct", 0) or 0)
+            pendencias = conformidade.get("pendencias", []) or []
+            processo.resumo_ia = resumo.get("resumo") or json.dumps(resumo, ensure_ascii=False)
+            processo.checklist_ia = json.dumps(conformidade, ensure_ascii=False)
+
+            if conformidade_pct < 100:
+                print(f"[ANALISE BACKGROUND] Chamando /ia/despacho para processo {processo_id}", flush=True)
+                despacho = await rag_client.sugerir_despacho(
+                    texto_documento=texto_documento,
+                    pendencias=", ".join(map(str, pendencias)),
+                )
+                processo.despacho_automatico = despacho.get("despacho") or json.dumps(
+                    despacho,
+                    ensure_ascii=False,
+                )
+                processo.status = StatusEnum.PENDENTE_PROFESSOR
+                AnaliseService._append_log(
+                    processo,
+                    f"Conformidade parcial ({conformidade_pct:.2f}%). Despacho sugerido gerado.",
+                )
+            else:
+                processo.status = StatusEnum.ANALISE_PENDENTE
+                AnaliseService._append_log(
+                    processo,
+                    f"Conformidade total ({conformidade_pct:.2f}%). Análise concluída.",
+                )
             processo.analise_status = AnaliseStatusEnum.COMPLETED.value
             processo.analise_concluida_em = datetime.now(timezone.utc)
             processo.analise_erro = None
-            
+
             AnaliseService._append_log(processo, "Análise automática IA concluída com sucesso.")
             await db.flush()
             return processo
@@ -136,20 +143,25 @@ class AnaliseService:
             timeout=settings.rag_service_timeout,
         )
 
+        print(
+            f"[ANALISE BACKGROUND] Iniciando processo {processo_id} via {settings.rag_service_url}",
+            flush=True,
+        )
+
         async with session_factory() as db:
             try:
-                print(f"[RAG BACKGROUND] Iniciando task de background para {processo_id}")
                 await AnaliseService.executar_analise_automatica(
                     db=db,
                     processo_id=processo_id,
                     rag_client=rag_client,
                 )
                 await db.commit()
-                print(f"[RAG BACKGROUND] Task finalizada e commitada para {processo_id}")
-            except Exception as e:
-                import traceback
-                print(f"[RAG BACKGROUND] ERRO FATAL: {e}")
-                traceback.print_exc()
+                print(f"[ANALISE BACKGROUND] Processo {processo_id} finalizado.", flush=True)
+            except Exception as exc:
                 await db.rollback()
+                print(
+                    f"[ANALISE BACKGROUND] Falha no processo {processo_id}: {exc}",
+                    flush=True,
+                )
             finally:
                 await rag_client.close()

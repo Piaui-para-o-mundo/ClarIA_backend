@@ -172,7 +172,6 @@ async def upload_documentos(
         background_tasks: Task runner para background processing.
         token: Token JWT de autenticação.
         db: Sessão de banco de dados.
-        rag_client: Cliente RAG para análise.
         
     Returns:
         dict: {"sucesso": int, "falhas": int, "detalhes": list[dict]}
@@ -318,6 +317,8 @@ async def update_status_processo(
     await db.commit()
 
     return ProcessoResponse.from_orm(processo)
+
+
 @router.get("/{processo_id}/analise", response_model=AnaliseStatusResponse)
 async def get_status_analise(
     processo_id: UUID,
@@ -344,7 +345,6 @@ async def get_status_analise(
         checklist_ia=processo.checklist_ia,
         despacho_automatico=processo.despacho_automatico,
     )
-
 
 @router.post("/{processo_id}/analise", response_model=AnaliseStatusResponse)
 async def iniciar_analise_processo(
@@ -396,3 +396,4 @@ async def iniciar_analise_processo(
         checklist_ia=processo.checklist_ia,
         despacho_automatico=processo.despacho_automatico,
     )
+

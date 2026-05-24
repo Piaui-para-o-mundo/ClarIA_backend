@@ -38,8 +38,55 @@ class RagClient:
             return response.status_code == 200
         except Exception:
             return False
-    
 
+    async def ingest_documento(self, pdf_content: bytes, filename: str) -> dict[str, Any]:
+        """Envia um documento para indexacao no servico RAG."""
+        files = {
+            "file": (filename, pdf_content, "application/pdf"),
+        }
+        response = await self.client.post(
+            f"{self.base_url}/ia/ingest",
+            files=files,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def gerar_resumo(self, texto_documento: str) -> dict[str, Any]:
+        """Solicita resumo de texto ao servico de IA."""
+        response = await self.client.post(
+            f"{self.base_url}/ia/resumo",
+            json={"texto_documento": texto_documento},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def verificar_conformidade(
+        self,
+        texto_documento: str,
+        tipo_processo: str,
+    ) -> dict[str, Any]:
+        """Solicita checklist de conformidade documental."""
+        response = await self.client.post(
+            f"{self.base_url}/ia/conformidade",
+            json={
+                "texto_documento": texto_documento,
+                "tipo_processo": tipo_processo,
+            },
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def sugerir_despacho(self, texto_documento: str, pendencias: str) -> dict[str, Any]:
+        """Solicita minuta de despacho com base em pendencias."""
+        response = await self.client.post(
+            f"{self.base_url}/ia/despacho",
+            json={
+                "texto_documento": texto_documento,
+                "pendencias": pendencias,
+            },
+        )
+        response.raise_for_status()
+        return response.json()
 
     async def analisar_processo(
         self,

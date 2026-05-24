@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -10,13 +9,12 @@ from app.schemas.documento import DocumentoResponse
 
 class ProcessoCreate(BaseModel):
     """Schema para criação de processo."""
-
     tipo: Literal[
         "progressao_funcional",
         "promocao",
         "afastamento_mestrado",
         "licenca_premio",
-        "outros",
+        "outros"
     ]
 
 
@@ -27,7 +25,6 @@ class ProcessoResumo(BaseModel):
     numero: str
     tipo: str
     status: str
-    analise_status: str
     setor_remetente: str | None = None
     criado_em: datetime
     atualizado_em: datetime
@@ -42,16 +39,13 @@ class ProcessoResponse(BaseModel):
     numero: str
     tipo: str
     status: str
-    analise_status: str
     usuario_id: UUID
     setor_remetente: str | None = None
-    analise_started_em: datetime | None = None
-    analise_concluida_em: datetime | None = None
-    analise_erro: str | None = None
-    analise_log: str | None = None
+    # Resultado da análise automática pelo RAG (preenchido pelo BackgroundTask)
     resumo_ia: str | None = None
     checklist_ia: str | None = None
     despacho_automatico: str | None = None
+    # Despacho editado e aprovado pelo avaliador
     despacho_avaliador: str | None = None
     criado_em: datetime
     atualizado_em: datetime
@@ -61,7 +55,7 @@ class ProcessoResponse(BaseModel):
 
 
 class AnaliseStatusResponse(BaseModel):
-    """Schema para acompanhar o estado da análise automática."""
+    """Schema para o status da análise automática do processo."""
 
     processo_id: UUID
     analise_status: str
