@@ -148,4 +148,9 @@ async def send_despacho_to_processo(
 
     print(f"[DISPATCH SEND] Documento salvo: id={doc_id}, caminho={documento.caminho_arquivo}", flush=True)
 
-    return JSONResponse({"ok": True, "documento_id": doc_id, "caminho": documento.caminho_arquivo})
+    return JSONResponse({
+        "ok": True,
+        "documento_id": doc_id,
+        "caminho": documento.caminho_arquivo,
+        "processo_numero": payload.processo_numero or processo.numero,
+    })
