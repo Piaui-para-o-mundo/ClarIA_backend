@@ -80,6 +80,22 @@ class Process(Base):
         default=AnaliseStatusEnum.PENDING.value,
         index=True,
     )
+    analise_started_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    analise_concluida_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    analise_erro: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    analise_log: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
     resumo_ia: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
