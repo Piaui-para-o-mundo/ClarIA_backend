@@ -24,6 +24,7 @@ from app.schemas.processo import (
     ProcessoCreate,
     ProcessoResponse,
     ProcessoResumo,
+    AnaliseStatusResponse,
 )
 
 from app.models.process import AnaliseStatusEnum, StatusEnum
@@ -157,7 +158,6 @@ async def upload_documentos(
     arquivos: list[UploadFile] = File(...),
     tipos_doc: list[str] = Form(...),
     db: AsyncSession = Depends(get_db),
-    rag_client: RagClient = Depends(get_rag_client),
 ):
     """
     Upload de múltiplos documentos para um processo com suporte a paralelismo.
@@ -321,7 +321,7 @@ async def update_status_processo(
 @router.get("/{processo_id}/analise", response_model=AnaliseStatusResponse)
 async def get_status_analise(
     processo_id: UUID,
-    rag_client: RagClient,
+    db: AsyncSession = Depends(get_db),
 ):
     """Retorna o status atual da análise automática do processo."""
 
