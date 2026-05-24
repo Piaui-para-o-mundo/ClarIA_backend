@@ -53,18 +53,8 @@ async def get_resultado_ia(
 
     analise_status = processo.analise_status or AnaliseStatusEnum.PENDING.value
 
-    if analise_status == AnaliseStatusEnum.ERROR.value:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "mensagem": "A análise de IA falhou para este processo.",
-                "analise_status": analise_status,
-                "analise_erro": processo.analise_erro,
-            },
-        )
-
-    # IA ainda não terminou (background task em andamento)
-    if not processo.resumo_ia and not processo.checklist_ia:
+    # Se estiver pendente ou em processamento, informe 202 para o frontend
+    if analise_status in {AnaliseStatusEnum.PENDING.value, AnaliseStatusEnum.PROCESSING.value}:
         raise HTTPException(
             status_code=status.HTTP_202_ACCEPTED,
             detail={
@@ -73,6 +63,8 @@ async def get_resultado_ia(
             },
         )
 
+    # Para status finais ('completed' ou 'error') sempre retornar 200 com os dados,
+    # deixando o frontend decidir como exibir (erro tratado como informação).
     return {
         "processo_id": str(processo.id),
         "numero": processo.numero,

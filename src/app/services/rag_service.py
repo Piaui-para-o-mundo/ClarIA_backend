@@ -111,31 +111,48 @@ class RagClient:
         
         Retorna dict com corpo_despacho, etc.
         """
-        # Montar o texto descritivo do processo para o LLM
+        # Construir prompt refinado com lógica binária conforme Manual CPPD
         tipo_processo = checklist_result.get("tipo_processo", "não especificado")
-        conformidade = checklist_result.get("conformidade_pct", "N/A")
-        aprovado = checklist_result.get("aprovado", False)
-        
-        texto = f"Tipo de processo: {tipo_processo}\n"
-        texto += f"Conformidade: {conformidade}%\n"
-        texto += f"Aprovado: {'Sim' if aprovado else 'Não'}\n"
-        if resumo_texto:
-            texto += f"\nResumo Executivo:\n{resumo_texto}\n"
-        
-        # Extrair pendências do checklist para enviar como string
-        pendencias_list = checklist_result.get("documentos_faltando", [])
-        if pendencias_list:
-            pendencias_str = json.dumps(pendencias_list, ensure_ascii=False)
-        else:
-            pendencias_str = "Nenhuma pendência identificada."
+        conformidade = checklist_result.get("conformidade_pct", None)
+        aprovado = bool(checklist_result.get("aprovado", False))
 
-        response = await self.client.post(
-            f"{self.base_url}/ia/despacho",
-            json={
-                "texto": texto,
-                "pendencias": pendencias_str,
-            },
+        pendencias_list = checklist_result.get("documentos_faltando") or checklist_result.get("pendencias") or []
+        if isinstance(pendencias_list, str):
+            try:
+                pendencias_list = json.loads(pendencias_list)
+            except Exception:
+                pendencias_list = [pendencias_list]
+
+        # Prompt em português, saída estrita em JSON com campos esperados
+        prompt = (
+            "Você é um assistente especialista no Manual CPPD e no formato SEI. "
+            "Aplique a lógica BINÁRIA: se a conformidade é 100% (aprovado), indique 'encaminhar' para prosseguimento; "
+            "caso contrário, indique 'devolver' com lista detalhada de pendências.\n\n"
         )
+
+        prompt += f"Dados do processo:\n- Tipo: {tipo_processo}\n- Conformidade: {conformidade}\n- Aprovado: {aprovado}\n"
+        if resumo_texto:
+            prompt += f"\nResumo Executivo:\n{resumo_texto}\n"
+
+        prompt += "\nPendências (array):\n"
+        if pendencias_list:
+            for p in pendencias_list:
+                prompt += f"- {p}\n"
+        else:
+            prompt += "- Nenhuma pendência identificada\n"
+
+        prompt += (
+            "\nGere um objeto JSON estrito com as chaves: \n"
+            "{\n  \"decisao\": \"encaminhar|devolver\",\n  \"corpo_despacho\": \"...texto em formato SEI...\",\n  \"pendencias\": [ ... ],\n  \"referencias_normativas\": [ ... ],\n  \"justificativa\": \"...\"\n}\n"
+        )
+
+        # Reforçar que a resposta NÃO deve ter texto adicional fora do JSON
+        payload = {
+            "prompt": prompt,
+            "format": "json",
+        }
+
+        response = await self.client.post(f"{self.base_url}/ia/despacho", json=payload)
         response.raise_for_status()
         return response.json()
 
