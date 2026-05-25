@@ -38,6 +38,7 @@ Para evitar processar os mesmos PDFs pesados repetidas vezes, o novo fluxo funci
 - **Payload (Form Data):**
   - `type_process` (String): O tipo do processo (ex: "Progressão Funcional").
   - `files` (List of Files): Os PDFs enviados pelo professor.
+- **Importante:** os nomes dos campos precisam ser exatamente `type_process` e `files`. Não envie JSON ou `raw` nessa rota.
 - **Retorno de Sucesso:**
   ```json
   {

@@ -62,7 +62,7 @@ Rotas para gestão de processos e upload de documentos.
 - **Payload (JSON):**
   ```json
   {
-    "tipo": "progressao_funcional" // Valores aceitos: "progressao_funcional", "promocao", "afastamento_mestrado", "licenca_premio", "outros"
+    "tipo": "progressao_funcional" // Valores aceitos: "progressao_funcional", "promocao", "afastamento_mestrado", "afastamento_pos_graduacao", "licenca_premio", "outros"
   }
   ```
 - **Retorno de Sucesso:** Objeto completo do Processo criado.
