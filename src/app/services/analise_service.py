@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from uuid import UUID
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -26,6 +27,39 @@ class AnaliseService:
             processo.analise_log = f"{processo.analise_log}\n{entrada}"
         else:
             processo.analise_log = entrada
+
+    @staticmethod
+    def _gerar_despacho_fallback(processo: Processo, checklist_result: dict, resumo_texto: str) -> str:
+        """Gera um despacho mínimo quando o serviço RAG não está disponível."""
+
+        conformidade = checklist_result.get("conformidade_pct")
+        documentos_faltando = checklist_result.get("documentos_faltando") or []
+        aprovado = bool(checklist_result.get("aprovado"))
+
+        linhas = [
+            "DESPACHO AUTOMÁTICO PROVISÓRIO",
+            f"Processo: {processo.numero}",
+            f"Tipo: {processo.tipo}",
+        ]
+
+        if conformidade is not None:
+            linhas.append(f"Conformidade: {conformidade}%")
+
+        if aprovado:
+            linhas.append("Conclusão: documentação suficiente para prosseguimento.")
+        else:
+            linhas.append("Conclusão: documentação pendente de complementação.")
+
+        if documentos_faltando:
+            faltantes = ", ".join(str(item) for item in documentos_faltando)
+            linhas.append(f"Pendências: {faltantes}")
+
+        if resumo_texto:
+            linhas.append("")
+            linhas.append("Resumo executivo:")
+            linhas.append(resumo_texto.strip())
+
+        return "\n".join(linhas).strip()
 
     @staticmethod
     async def obter_processo_lock(db: AsyncSession, processo_id: UUID) -> Processo | None:
@@ -194,14 +228,26 @@ class AnaliseService:
 
         # Etapa 3: Despacho
         print(f"[ANALISE MANUAL] Iniciando Etapa 3: Despacho para {processo_id}", flush=True)
-        
-        despacho_response = await rag_client.sugerir_despacho(
-            checklist_result=checklist_result,
-            resumo_texto=processo.resumo_ia or "",
-        )
-        processo.despacho_automatico = rag_client._extrair_despacho_texto(despacho_response)
-        
-        AnaliseService._append_log(processo, "Despacho manual concluído com sucesso.")
+
+        resumo_texto = processo.resumo_ia or ""
+        try:
+            despacho_response = await rag_client.sugerir_despacho(
+                checklist_result=checklist_result,
+                resumo_texto=resumo_texto,
+            )
+            processo.despacho_automatico = rag_client._extrair_despacho_texto(despacho_response)
+            AnaliseService._append_log(processo, "Despacho manual concluído com sucesso.")
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            processo.despacho_automatico = AnaliseService._gerar_despacho_fallback(
+                processo=processo,
+                checklist_result=checklist_result,
+                resumo_texto=resumo_texto,
+            )
+            AnaliseService._append_log(
+                processo,
+                f"RAG indisponível, despacho provisório gerado localmente: {exc}",
+            )
+
         await db.commit()
         return processo
 
