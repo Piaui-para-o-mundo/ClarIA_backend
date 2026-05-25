@@ -4,8 +4,10 @@ Testes para rotas de análise.
 Testa endpoints de resumo, conformidade, despacho e análises via RAG.
 """
 from io import BytesIO
+from types import SimpleNamespace
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
@@ -208,6 +210,50 @@ class TestDespacho:
             headers={"Authorization": f"Bearer {token}"}
         )
         assert response.status_code == 404
+
+    @patch("app.services.rag_service.RagClient.sugerir_despacho", new_callable=AsyncMock)
+    @patch("app.services.rag_service.RagClient.gerar_resumo", new_callable=AsyncMock)
+    @patch("app.services.rag_service.RagClient.verificar_conformidade", new_callable=AsyncMock)
+    def test_gerar_despacho_usando_fallback_local_quando_rag_cai(
+        self,
+        mock_conformidade,
+        mock_resumo,
+        mock_despacho,
+    ):
+        """Deve retornar despacho provisório mesmo sem conexão com o RAG."""
+        token = _create_test_user()
+
+        mock_conformidade.return_value = {
+            "checklist": {"aprovado": False, "conformidade_pct": 80.0, "documentos_faltando": ["cpf"]},
+            "textos_extraidos": [{"nome": "doc.pdf", "texto": "Conteudo"}],
+        }
+        mock_resumo.return_value = {"resumo": "Resumo automático"}
+        mock_despacho.side_effect = httpx.ConnectError(
+            "All connection attempts failed",
+            request=httpx.Request("POST", "http://rag.local/ia/despacho"),
+        )
+
+        fake_processo = SimpleNamespace(
+            id=uuid4(),
+            numero="2026-0001",
+            tipo="requerimento",
+            checklist_ia='{"checklist": {"aprovado": false, "conformidade_pct": 80.0, "documentos_faltando": ["cpf"]}}',
+            resumo_ia="Resumo automático",
+            despacho_automatico=None,
+            analise_log="",
+        )
+
+        with patch("app.services.processo_service.ProcessoService.get_processo", new_callable=AsyncMock, return_value=fake_processo), \
+             patch("app.services.analise_service.AnaliseService.obter_processo_lock", new_callable=AsyncMock, return_value=fake_processo):
+            response = client.post(
+                f"/api/v1/analise/{fake_processo.id}/gerar-despacho",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["despacho_automatico"]
+        assert "DESPACHO AUTOMÁTICO PROVISÓRIO" in data["despacho_automatico"]
 
 
 class TestAutenticacaoAnalise:
