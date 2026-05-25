@@ -96,6 +96,8 @@ class AnaliseService:
                 type_process=processo.tipo,
             )
             checklist_result = conformidade.get("checklist") or conformidade
+            
+            # O checklist_ia salva os textos extraídos para que a função gerar_resumo() não precise re-extrair os PDFs do disco.
             processo.checklist_ia = json.dumps(conformidade, ensure_ascii=False)
             
             # Determina status final do processo baseado no checklist
@@ -164,8 +166,8 @@ class AnaliseService:
         # Etapa 2: Resumo
         print(f"[ANALISE MANUAL] Iniciando Etapa 2: Resumo para {processo_id}", flush=True)
         
-        if aprovado or conformidade_pct >= 100:
-            textos_extraidos = conformidade.get("textos_extraidos") or []
+        textos_extraidos = conformidade.get("textos_extraidos") or []
+        if textos_extraidos:
             resumo_response = await rag_client.gerar_resumo(
                 tipo_processo=processo.tipo,
                 textos_extraidos=textos_extraidos,
@@ -173,9 +175,10 @@ class AnaliseService:
             processo.resumo_ia = rag_client._extrair_resumo_texto(resumo_response)
             AnaliseService._append_log(processo, "Resumo manual concluído com sucesso.")
         else:
-            processo.resumo_ia = '{"resumo": "Análise suspensa pela triagem inicial. O processo possui pendências documentais e deve ser saneado pelo requerente antes da avaliação de mérito."}'
-            AnaliseService._append_log(processo, "Resumo pulado (pendências detectadas).")
+            processo.resumo_ia = "Não foi possível gerar o resumo pois não há textos extraídos dos documentos."
+            AnaliseService._append_log(processo, "Resumo falhou: Falta de textos extraídos.")
         
+        # COMITA IMEDIATAMENTE para o frontend exibir o resumo
         await db.commit()
         return processo
 
