@@ -110,7 +110,7 @@ class AnaliseService:
                 
             AnaliseService._append_log(processo, "Checklist concluído. Resumo e despacho pendentes de solicitação manual.")
             
-            if not aprovado or conformidade_pct < 100:
+            if conformidade_pct < 100:
                 processo.status = StatusEnum.PENDENTE_PROFESSOR
                 AnaliseService._append_log(
                     processo,
@@ -155,13 +155,6 @@ class AnaliseService:
 
         conformidade = json.loads(processo.checklist_ia)
         checklist_result = conformidade.get("checklist") or conformidade
-
-        aprovado = bool(checklist_result.get("aprovado"))
-        conformidade_pct = checklist_result.get("conformidade_pct")
-        if conformidade_pct is None:
-            conformidade_pct = 100.0 if aprovado else 0.0
-        else:
-            conformidade_pct = float(conformidade_pct or 0)
 
         # Etapa 2: Resumo
         print(f"[ANALISE MANUAL] Iniciando Etapa 2: Resumo para {processo_id}", flush=True)

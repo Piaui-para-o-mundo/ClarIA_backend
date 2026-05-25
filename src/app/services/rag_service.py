@@ -1,5 +1,4 @@
-from typing import Any
-
+from typing import Any, AsyncGenerator
 import json
 import httpx
 
@@ -199,7 +198,7 @@ class RagClient:
             textos_extraidos=textos_extraidos,
         )
 
-        # Extrair a string do resumo — pode estar em vários formatos
+        # Extrair a string do resumo
         resumo_texto = self._extrair_resumo_texto(resumo_response)
 
         # ── ETAPA 3: Despacho ──
@@ -299,7 +298,7 @@ class RagClient:
         """Fecha cliente HTTP."""
         await self.client.aclose()
 
-async def get_rag_client() -> RagClient:
+async def get_rag_client() -> AsyncGenerator[RagClient, None]:
     """
     Dependency injection para RAGClient.
     
