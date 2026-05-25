@@ -1,7 +1,6 @@
 from pathlib import Path
 from datetime import datetime
 import traceback
-import sys
 from typing import Annotated
 from uuid import UUID
 
@@ -19,9 +18,8 @@ from app.services.processo_service import ProcessoService
 router = APIRouter(prefix="/api/v1/dispatch", tags=["dispatch"])
 bearer_scheme = HTTPBearer()
 
-templates = Jinja2Templates(
-    directory=str(Path(__file__).resolve().parents[2] / "template")
-)
+TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "template"
+templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
 
 class DispatchPayload(BaseModel):
@@ -35,6 +33,64 @@ class DispatchPayload(BaseModel):
     numero_despacho: str = "___/CPPD/2026"
 
 
+def _get_user_attr(user, attr: str, default: str) -> str:
+    return getattr(user, attr, default) if user else default
+
+def _replace_dispatch_placeholders(text: str, replacements: dict[str, str]) -> str:
+    for placeholder, value in replacements.items():
+        text = text.replace(placeholder, value)
+    return text
+
+def _build_dispatch_context(
+    processo,
+    *,
+    setor_destino_sugerido: str,
+    assunto: str,
+    corpo_despacho: str,
+    processo_numero: str | None = None,
+    numero_despacho: str,
+    emitido_em: str | None = None,
+) -> dict:
+    usuario = getattr(processo, "usuario", None)
+    professor_nome = _get_user_attr(usuario, "nome", "N/A")
+    professor_setor = _get_user_attr(usuario, "setor", "N/A")
+    professor_matricula = _get_user_attr(usuario, "matricula", "N/A")
+    numero_processo = processo_numero or getattr(processo, "numero", "")
+    emitido_em = emitido_em or datetime.utcnow().strftime("%d/%m/%Y")
+
+    corpo_despacho = _replace_dispatch_placeholders(
+        corpo_despacho,
+        {
+            "[numero_processo]": numero_processo,
+            "[nome_requerente]": professor_nome,
+            "[cargo]": _get_user_attr(usuario, "cargo", ""),
+            "[matricula]": professor_matricula,
+            "[lotacao]": professor_setor,
+            "[AUTORIDADE]": setor_destino_sugerido,
+            "[DATA_ATUAL]": emitido_em,
+        },
+    )
+
+    return {
+        "processo_numero": numero_processo,
+        "setor_destino_sugerido": setor_destino_sugerido,
+        "assunto": assunto,
+        "professor_nome": professor_nome,
+        "professor_setor": professor_setor,
+        "professor_matricula": professor_matricula,
+        "emitido_em": emitido_em,
+        "corpo_despacho": corpo_despacho,
+        "numero_despacho": numero_despacho,
+    }
+
+def _render_dispatch_html(context: dict) -> str:
+    return templates.env.get_template("dispatch.html").render(context)
+
+def _generate_pdf(html: str) -> bytes:
+    from weasyprint import HTML
+    return HTML(string=html, base_url=str(TEMPLATE_DIR)).write_pdf()
+
+
 @router.get("/pdf-preview/{processo_id}")
 async def pdf_preview(
     processo_id: UUID,
@@ -46,28 +102,21 @@ async def pdf_preview(
     if not processo:
         raise HTTPException(status_code=404, detail="Processo não encontrado")
 
-    # Usa o corpo editado enviado pelo front, ou o automático do banco, ou fallback
-    corpo = corpo_editado or processo.despacho_automatico or "Despacho não gerado."
-
     usuario = getattr(processo, 'usuario', None)
     context = {
         "processo_numero": processo.numero,
-        "setor_destino_sugerido": "CPPD / GABINETE", # Exemplo
+        "setor_destino_sugerido": processo.setor_remetente, # Exemplo
         "assunto": f"Análise de {processo.tipo}",
-        "professor_nome": getattr(usuario, 'nome', 'N/A'),
-        "professor_setor": getattr(usuario, 'setor', 'N/A'),
-        "professor_matricula": getattr(usuario, 'matricula', 'N/A') if hasattr(usuario, 'matricula') else 'N/A',
+        "professor_nome": _get_user_attr(usuario, 'nome', 'N/A'),
+        "professor_setor": _get_user_attr(usuario, 'setor', 'N/A'),
+        "professor_matricula": _get_user_attr(usuario, 'matricula', 'N/A'),
         "emitido_em": datetime.utcnow().strftime('%d/%m/%Y'),
-        "corpo_despacho": corpo,
+        "corpo_despacho": corpo_editado or processo.despacho_automatico or "Despacho não gerado.",
         "numero_despacho": "PREVIEW/2026"
     }
 
     try:
-        html = templates.env.get_template("dispatch.html").render(context)
-        from weasyprint import HTML
-        template_dir = Path(__file__).resolve().parents[2] / "template"
-        pdf_bytes = HTML(string=html, base_url=str(template_dir)).write_pdf()
-        
+        pdf_bytes = _generate_pdf(_render_dispatch_html(context))
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
@@ -81,17 +130,11 @@ async def pdf_preview(
 @router.post("/preview", response_class=HTMLResponse)
 async def render_preview(request: Request, payload: DispatchPayload):
     context = payload.model_dump()
-    context.update(
-        {
-            "request": request,
-            "processo_numero": payload.processo_numero or "",
-        }
-    )
-    return templates.TemplateResponse(
-        request=request,
-        name="dispatch.html",
-        context=context,
-    )
+    context.update({
+        "request": request,
+        "processo_numero": payload.processo_numero or "",
+    })
+    return templates.TemplateResponse(request=request, name="dispatch.html", context=context)
 
 
 @router.post("/send/{processo_id}")
@@ -119,38 +162,30 @@ async def send_despacho_to_processo(
             detail="Processo não encontrado",
         )
 
-    # Renderiza template para string
-    context = payload.model_dump()
     usuario = getattr(processo, 'usuario', None)
-    professor_nome = getattr(usuario, 'nome', '') if usuario else ''
-    professor_setor = getattr(usuario, 'setor', '') if usuario else ''
-    # matricula não está no modelo User por padrão; placeholder vazio
-    professor_matricula = getattr(usuario, 'matricula', '') if usuario and hasattr(usuario, 'matricula') else ''
-
+    context = payload.model_dump()
+    
     context.update({
         "request": {},
         "processo_numero": payload.processo_numero or processo.numero,
-        "professor_nome": professor_nome,
-        "professor_setor": professor_setor,
-        "professor_matricula": professor_matricula,
+        "professor_nome": _get_user_attr(usuario, 'nome', ''),
+        "professor_setor": _get_user_attr(usuario, 'setor', ''),
+        "professor_matricula": _get_user_attr(usuario, 'matricula', ''),
         "emitido_em": datetime.utcnow().strftime('%d/%m/%Y'),
     })
+    
     try:
-        html = templates.env.get_template("dispatch.html").render(context)
-    except Exception as e:
-        tb = traceback.format_exc()
-        print("[DISPATCH SEND] Erro ao renderizar template:\n", tb, flush=True)
+        html = _render_dispatch_html(context)
+    except Exception:
+        print(f"[DISPATCH SEND] Erro ao renderizar template:\n{traceback.format_exc()}", flush=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao renderizar template. Verifique os logs do servidor.",
         )
 
-    # Tenta gerar PDF via WeasyPrint (import lazy) e salvar documento
     try:
         try:
-            from weasyprint import HTML
-            template_dir = Path(__file__).resolve().parents[2] / "template"
-            pdf_bytes = HTML(string=html, base_url=str(template_dir)).write_pdf()
+            pdf_bytes = _generate_pdf(html)
             filename = f"Despacho_{processo.numero}.pdf"
             documento = await ProcessoService.save_documento(
                 db=db,
@@ -161,18 +196,16 @@ async def send_despacho_to_processo(
             )
         except ModuleNotFoundError:
             # WeasyPrint não disponível: salva HTML como fallback
-            arquivo_bytes = html.encode("utf-8")
             filename = f"despacho_{processo.numero}.html"
             documento = await ProcessoService.save_documento(
                 db=db,
                 processo_id=str(processo_id),
                 tipo_doc="despacho_html",
-                arquivo_bytes=arquivo_bytes,
+                arquivo_bytes=html.encode("utf-8"),
                 name_arquivo=filename,
             )
-    except Exception as e:
-        tb = traceback.format_exc()
-        print("[DISPATCH SEND] Erro ao gerar/salvar despacho:\n", tb, flush=True)
+    except Exception:
+        print(f"[DISPATCH SEND] Erro ao gerar/salvar despacho:\n{traceback.format_exc()}", flush=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao gerar ou salvar o despacho. Verifique os logs do servidor.",

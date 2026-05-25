@@ -256,7 +256,7 @@ async def aprovar_despacho(
     usuario = getattr(processo, 'usuario', None)
     context = {
         "processo_numero": processo.numero,
-        "setor_destino_sugerido": "REQUERENTE (PROFESSOR)",
+        "setor_destino_sugerido": processo.setor_remetente,
         "assunto": f"Despacho de Análise: {processo.tipo}",
         "professor_nome": getattr(usuario, 'nome', 'N/A'),
         "professor_setor": getattr(usuario, 'setor', 'N/A'),
