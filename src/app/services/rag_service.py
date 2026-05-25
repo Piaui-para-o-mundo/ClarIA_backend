@@ -228,57 +228,72 @@ class RagClient:
     def _extrair_resumo_texto(resumo_response: Any) -> str:
         """
         Extrai uma STRING de resumo do retorno da API /ia/resumo.
-        
-        A resposta pode vir em vários formatos:
-        - {"resumo": {"resultado": {"tipo_solicitacao": ...}}}
-        - {"resumo": {"resultado": "texto livre"}}
-        - {"resumo": "texto livre"}
-        - "texto livre"
+        Garante que o resultado final seja texto limpo, sem metadados JSON.
         """
         if isinstance(resumo_response, str):
-            return resumo_response
+            res_str = resumo_response
+        elif not isinstance(resumo_response, dict):
+            res_str = str(resumo_response)
+        else:
+            # É um dicionário, tenta navegar até o conteúdo real
+            resumo_inner = resumo_response.get("resumo", resumo_response)
+            if isinstance(resumo_inner, str):
+                res_str = resumo_inner
+            else:
+                resultado = resumo_inner.get("resultado", resumo_inner)
+                if isinstance(resultado, str):
+                    res_str = resultado
+                elif isinstance(resultado, dict):
+                    # Tenta pegar campos comuns de texto dentro do resultado
+                    for k in ["resumo", "texto", "conteudo", "analise"]:
+                        if isinstance(resultado.get(k), str):
+                            return resultado[k]
+                    res_str = json.dumps(resultado, ensure_ascii=False, indent=2)
+                else:
+                    res_str = json.dumps(resumo_response, ensure_ascii=False, indent=2)
 
-        if not isinstance(resumo_response, dict):
-            return str(resumo_response)
-
-        resumo_inner = resumo_response.get("resumo", resumo_response)
+        # Limpeza final: se a string resultante ainda parecer um JSON stringificado
+        if res_str.strip().startswith("{") and res_str.strip().endswith("}"):
+            try:
+                temp_obj = json.loads(res_str)
+                return RagClient._extrair_resumo_texto(temp_obj)
+            except:
+                pass
         
-        if isinstance(resumo_inner, str):
-            return resumo_inner
+        return res_str.strip()
 
-        if isinstance(resumo_inner, dict):
-            resultado = resumo_inner.get("resultado", resumo_inner)
-            if isinstance(resultado, str):
-                return resultado
-            if isinstance(resultado, dict):
-                return json.dumps(resultado, ensure_ascii=False, indent=2)
-        
-        return json.dumps(resumo_response, ensure_ascii=False, indent=2)
 
     @staticmethod
     def _extrair_despacho_texto(despacho_response: Any) -> str:
         """
         Extrai uma STRING de despacho do retorno da API /ia/despacho.
-        
-        A resposta pode vir em vários formatos:
-        - {"corpo_despacho": "texto...", ...}
-        - {"despacho": "texto...", ...}
-        - "texto livre"
+        Garante que o resultado final seja texto limpo, sem metadados JSON.
         """
         if isinstance(despacho_response, str):
-            return despacho_response
+            res_str = despacho_response
+        elif not isinstance(despacho_response, dict):
+            res_str = str(despacho_response)
+        else:
+            # Tentar extrair de chaves conhecidas
+            for key in ("corpo_despacho", "despacho", "texto", "resultado"):
+                val = despacho_response.get(key)
+                if val and isinstance(val, str):
+                    return val.strip()
+                if val and isinstance(val, dict):
+                    return RagClient._extrair_despacho_texto(val)
+            
+            res_str = json.dumps(despacho_response, ensure_ascii=False, indent=2)
 
-        if not isinstance(despacho_response, dict):
-            return str(despacho_response)
+        # Limpeza final: se a string resultante ainda parecer um JSON stringificado
+        if res_str.strip().startswith("{") and res_str.strip().endswith("}"):
+            try:
+                temp_obj = json.loads(res_str)
+                return RagClient._extrair_despacho_texto(temp_obj)
+            except:
+                pass
 
-        # Tentar extrair de chaves conhecidas
-        for key in ("corpo_despacho", "despacho", "texto", "resultado"):
-            val = despacho_response.get(key)
-            if val and isinstance(val, str):
-                return val
-        
-        # Se nenhuma chave conhecida, serializar tudo
-        return json.dumps(despacho_response, ensure_ascii=False, indent=2)
+        return res_str.strip()
+
 
     async def close(self) -> None:
         """Fecha cliente HTTP."""
