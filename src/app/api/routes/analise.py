@@ -229,7 +229,7 @@ async def gerar_despacho(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ROTA 4 — Avaliador aprova/edita o despacho e conclui o processo
+# ROTA 4 — Avaliador aprova/edita o despacho e envia ao professor
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/{processo_id}/aprovar-despacho")
 async def aprovar_despacho(
@@ -239,38 +239,69 @@ async def aprovar_despacho(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Avaliador aprova ou edita o despacho automático e marca o processo como concluído.
-
-    Args:
-        processo_id: ID do processo.
-        despacho_editado: Texto do despacho (automático ou editado pelo avaliador).
-
-    Returns:
-        dict: {"status": "concluido", "processo_id": str}
-
-    Raises:
-        HTTPException 404: Processo não encontrado.
+    Avaliador aprova ou edita o despacho. 
+    Gera o PDF oficial e retorna o processo para o professor (PENDENTE_PROFESSOR).
     """
-    await get_current_user(token.credentials, db)
+    user = await get_current_user(token.credentials, db)
+    if not user or getattr(user, "role", None) != "avaliador":
+         raise HTTPException(status_code=403, detail="Apenas avaliadores podem assinar o despacho.")
 
     processo = await ProcessoService.get_processo(db=db, processo_id=processo_id)
     if not processo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Processo não encontrado.",
-        )
+        raise HTTPException(status_code=404, detail="Processo não encontrado.")
 
+    # 1. Salva o texto final no banco
     processo.despacho_avaliador = despacho_editado
 
+    # 2. Gera o PDF Oficial (Papel Timbrado)
+    from pathlib import Path
+    from datetime import datetime
+    from fastapi.templating import Jinja2Templates
+    
+    template_dir = Path(__file__).resolve().parents[2] / "template"
+    templates = Jinja2Templates(directory=str(template_dir))
+    
+    usuario = getattr(processo, 'usuario', None)
+    context = {
+        "processo_numero": processo.numero,
+        "setor_destino_sugerido": "REQUERENTE (PROFESSOR)",
+        "assunto": f"Despacho de Análise: {processo.tipo}",
+        "professor_nome": getattr(usuario, 'nome', 'N/A'),
+        "professor_setor": getattr(usuario, 'setor', 'N/A'),
+        "professor_matricula": getattr(usuario, 'matricula', 'N/A') if hasattr(usuario, 'matricula') else 'N/A',
+        "emitido_em": datetime.utcnow().strftime('%d/%m/%Y'),
+        "corpo_despacho": despacho_editado,
+        "numero_despacho": f"{datetime.now().year}/CPPD/{processo.numero.split('/')[-1] if '/' in processo.numero else '001'}"
+    }
+
+    try:
+        html = templates.env.get_template("dispatch.html").render(context)
+        from weasyprint import HTML
+        pdf_bytes = HTML(string=html, base_url=str(template_dir)).write_pdf()
+        
+        # 3. Salva o PDF como documento oficial do processo
+        await ProcessoService.save_documento(
+            db=db,
+            processo_id=str(processo_id),
+            tipo_doc="despacho_assinado",
+            arquivo_bytes=pdf_bytes,
+            name_arquivo=f"Despacho_Assinado_{processo.numero.replace('/', '_')}.pdf"
+        )
+    except Exception as e:
+        print(f"[ERRO GERAÇÃO PDF] {e}")
+        # Se falhar PDF, continuamos para não travar o fluxo, mas logamos
+    
+    # 4. Atualiza Status para PENDENTE_PROFESSOR (Regra de Negócio: volta para o dono)
     await ProcessoService.update_status(
         db=db,
         processo_id=processo_id,
-        novo_status=StatusEnum.CONCLUIDO,
+        novo_status=StatusEnum.PENDENTE_PROFESSOR,
     )
 
     await db.commit()
 
     return {
-        "status": "concluido",
+        "status": "enviado_ao_professor",
         "processo_id": str(processo_id),
+        "mensagem": "Despacho assinado e PDF gerado com sucesso. Processo devolvido ao professor."
     }
