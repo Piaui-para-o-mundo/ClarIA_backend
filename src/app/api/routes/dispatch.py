@@ -1,11 +1,12 @@
 from pathlib import Path
 from datetime import datetime
-
+import traceback
+import sys
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Request, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -14,8 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.services.processo_service import ProcessoService
-import traceback
-import sys
 
 router = APIRouter(prefix="/api/v1/dispatch", tags=["dispatch"])
 bearer_scheme = HTTPBearer()
@@ -34,6 +33,49 @@ class DispatchPayload(BaseModel):
     status_sugerido: str = Field(..., min_length=1)
     processo_numero: str | None = None
     numero_despacho: str = "___/CPPD/2026"
+
+
+@router.get("/pdf-preview/{processo_id}")
+async def pdf_preview(
+    processo_id: UUID,
+    corpo_editado: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Gera um PDF temporário do despacho para visualização no frontend sem exigir token (facilita abertura em nova aba)."""
+    processo = await ProcessoService.get_processo(db=db, processo_id=str(processo_id))
+    if not processo:
+        raise HTTPException(status_code=404, detail="Processo não encontrado")
+
+    # Usa o corpo editado enviado pelo front, ou o automático do banco, ou fallback
+    corpo = corpo_editado or processo.despacho_automatico or "Despacho não gerado."
+
+    usuario = getattr(processo, 'usuario', None)
+    context = {
+        "processo_numero": processo.numero,
+        "setor_destino_sugerido": "CPPD / GABINETE", # Exemplo
+        "assunto": f"Análise de {processo.tipo}",
+        "professor_nome": getattr(usuario, 'nome', 'N/A'),
+        "professor_setor": getattr(usuario, 'setor', 'N/A'),
+        "professor_matricula": getattr(usuario, 'matricula', 'N/A') if hasattr(usuario, 'matricula') else 'N/A',
+        "emitido_em": datetime.utcnow().strftime('%d/%m/%Y'),
+        "corpo_despacho": corpo,
+        "numero_despacho": "PREVIEW/2026"
+    }
+
+    try:
+        html = templates.env.get_template("dispatch.html").render(context)
+        from weasyprint import HTML
+        template_dir = Path(__file__).resolve().parents[2] / "template"
+        pdf_bytes = HTML(string=html, base_url=str(template_dir)).write_pdf()
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline; filename=preview_despacho.pdf"}
+        )
+    except Exception as e:
+        print(f"[PDF PREVIEW] Erro: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/preview", response_class=HTMLResponse)
