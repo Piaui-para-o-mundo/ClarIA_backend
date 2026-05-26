@@ -1,4 +1,3 @@
-
 from typing import Annotated
 from uuid import UUID
 
@@ -256,7 +255,7 @@ async def aprovar_despacho(
     usuario = getattr(processo, 'usuario', None)
     context = {
         "processo_numero": processo.numero,
-        "setor_destino_sugerido": processo.setor_remetente,
+        "setor_destino_sugerido": processo.setor_destino_sugerido,
         "assunto": f"Despacho de Análise: {processo.tipo}",
         "professor_nome": getattr(usuario, 'nome', 'N/A'),
         "professor_setor": getattr(usuario, 'setor', 'N/A'),
@@ -265,7 +264,6 @@ async def aprovar_despacho(
         "corpo_despacho": despacho_editado,
         "numero_despacho": f"{datetime.now().year}/CPPD/{processo.numero.split('/')[-1] if '/' in processo.numero else '001'}"
     }
-
     try:
         html = templates.env.get_template("dispatch.html").render(context)
         from weasyprint import HTML
