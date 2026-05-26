@@ -112,6 +112,7 @@ class RagClient:
         self,
         checklist_result: dict[str, Any],
         resumo_texto: str = "",
+        integridade_result: dict[str, Any] = None,
     ) -> dict[str, Any]:
         """
         Solicita minuta de despacho a partir do checklist e do resumo executivo.
@@ -126,15 +127,45 @@ class RagClient:
         tipo_processo = checklist_result.get("tipo_processo", "não especificado")
         conformidade = checklist_result.get("conformidade_pct", "N/A")
         aprovado = checklist_result.get("aprovado", False)
+        tramitacao = checklist_result.get("tramitacao_prevista", [])
         
         texto = f"Tipo de processo: {tipo_processo}\n"
         texto += f"Conformidade: {conformidade}%\n"
         texto += f"Aprovado: {'Sim' if aprovado else 'Não'}\n"
+        
+        if tramitacao:
+            texto += f"Fluxo de Tramitação (Ordem dos Setores): {' -> '.join(tramitacao)}\n"
+
         if resumo_texto:
             texto += f"\nResumo Executivo:\n{resumo_texto}\n"
         
-        # Extrair pendências do checklist para enviar como string
+        # Extrair pendências do checklist e integridade para enviar como JSON string
         pendencias_list = checklist_result.get("documentos_faltando", [])
+        
+        if integridade_result and not integridade_result.get("aprovado", True):
+            for erro in integridade_result.get("erros", []):
+                pendencias_list.append({
+                    "tipo_documento": erro.get("documento", ""),
+                    "descricao": erro.get("descricao", ""),
+                    "observacao": erro.get("sugestao", "")
+                })
+
+        # Extrair PONTOS DE ATENÇÃO do resumo_texto para reforçar ao LLM de Despacho
+        if resumo_texto:
+            import re
+            # Busca a tag PONTOS DE ATENÇÃO (ou similar) no resumo
+            match = re.search(r'PONTOS? DE ATENÇÃO:(.*?)(?:\n\n|\Z)', resumo_texto, re.IGNORECASE | re.DOTALL)
+            if match:
+                pontos_atencao = match.group(1).strip()
+                # Ignorar se o LLM apenas respondeu que não há pendências
+                negativas = ("nenhum", "não há", "n/a", "não identificado", "sem inconsist", "nenhuma")
+                if pontos_atencao and not pontos_atencao.lower().startswith(negativas):
+                    pendencias_list.append({
+                        "tipo_documento": "Análise Técnica",
+                        "descricao": "Inconsistências encontradas durante a leitura detalhada dos documentos.",
+                        "observacao": pontos_atencao
+                    })
+
         if pendencias_list:
             pendencias_str = json.dumps(pendencias_list, ensure_ascii=False)
         else:
@@ -205,6 +236,7 @@ class RagClient:
         despacho_response = await self.sugerir_despacho(
             checklist_result=checklist_result,
             resumo_texto=resumo_texto,
+            integridade_result=conformidade.get("integridade")
         )
 
         # Extrair corpo do despacho
