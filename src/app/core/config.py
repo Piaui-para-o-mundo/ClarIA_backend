@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     # =========================================================================
 
     rag_service_url: str = Field(
-        default="http://10.10.0.163:8001",
+        default="http://localhost:8001",
         alias="RAG_SERVICE_URL",
     )
 
