@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.database import close_db, init_db
-from app.api.routes import auth, processos, analise, dispatch
+from app.api.routes import auth, processos, analise, dispatch, notificacoes
 
 
 def _sanitize_validation_payload(value: Any) -> Any:
@@ -126,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(processos.router)
     app.include_router(analise.router)
     app.include_router(dispatch.router)
+    app.include_router(notificacoes.router)
 
     return app
 

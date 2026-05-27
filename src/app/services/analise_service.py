@@ -133,11 +133,119 @@ class AnaliseService:
             )
 
             if conformidade_pct < 100:
-                processo.status = StatusEnum.PENDENTE_PROFESSOR
+                # ─── DESPACHO AUTOMÁTICO PARA PROCESSOS COM PENDÊNCIAS ───
+                # Quando a conformidade é parcial, gera automaticamente o despacho
+                # de pendência, o PDF e notifica o professor, sem intervenção do avaliador.
                 AnaliseService._append_log(
                     processo,
-                    f'Conformidade parcial ({conformidade_pct:.2f}%).',
+                    f"Conformidade parcial ({conformidade_pct:.2f}%). Iniciando geração automática de despacho.",
                 )
+
+                setor_destino_mvp = "FUESPI-PI/GAB/PHB/TSC"
+
+                try:
+                    # 1. Gera o texto do despacho via IA
+                    resumo_texto = ""  # Resumo ainda não foi gerado nesta fase
+                    despacho_response = await rag_client.sugerir_despacho(
+                        checklist_result=checklist_result,
+                        resumo_texto=resumo_texto,
+                        integridade_result=conformidade.get("integridade"),
+                    )
+
+                    # Adiciona setor_destino ao JSON do despacho
+                    if isinstance(despacho_response, dict):
+                        despacho_response["setor_destino_sugerido"] = setor_destino_mvp
+
+                    processo.despacho_automatico = json.dumps(despacho_response, ensure_ascii=False)
+                    AnaliseService._append_log(processo, "Despacho automático gerado com sucesso pela IA.")
+
+                    # 2. Extrai o corpo do despacho para o PDF
+                    corpo_despacho = rag_client._extrair_texto(
+                        despacho_response, ("corpo_despacho", "despacho", "texto", "resultado")
+                    )
+
+                    # 3. Gera o PDF oficial
+                    try:
+                        from app.api.routes.dispatch import (
+                            _build_dispatch_context,
+                            _render_dispatch_html,
+                            _generate_pdf,
+                        )
+                        from datetime import datetime as dt_pdf
+
+                        context = _build_dispatch_context(
+                            processo=processo,
+                            setor_destino_sugerido=setor_destino_mvp,
+                            assunto=f"DESPACHO DE PENDÊNCIA — Processo Nº {processo.numero}",
+                            corpo_despacho=corpo_despacho,
+                            numero_despacho=f"{dt_pdf.now().year}/CPPD/{processo.numero.split('/')[-1] if '/' in processo.numero else '001'}",
+                        )
+
+                        html = _render_dispatch_html(context)
+                        pdf_bytes = _generate_pdf(html)
+
+                        # 4. Salva o PDF como documento do processo
+                        await ProcessoService.save_documento(
+                            db=db,
+                            processo_id=str(processo.id),
+                            tipo_doc="despacho_pendencia",
+                            arquivo_bytes=pdf_bytes,
+                            name_arquivo=f"Despacho_Pendencia_{processo.numero.replace('/', '_')}.pdf",
+                        )
+                        AnaliseService._append_log(processo, "PDF do despacho de pendência gerado e salvo.")
+
+                    except Exception as pdf_exc:
+                        # Se falhar PDF, continua sem travar — o texto já foi salvo
+                        AnaliseService._append_log(
+                            processo,
+                            f"Aviso: falha ao gerar PDF do despacho automático: {pdf_exc}",
+                        )
+                        print(f"[DESPACHO AUTO] Falha PDF: {pdf_exc}", flush=True)
+
+                    # 5. Cria notificação in-app para o professor
+                    try:
+                        from app.services.notificacao_service import NotificacaoService
+
+                        docs_faltando = checklist_result.get("documentos_faltando", [])
+                        nomes_faltando = ", ".join(
+                            (
+                                item if isinstance(item, str)
+                                else item.get("descricao") or item.get("tipo_documento", "Documento")
+                            )
+                            for item in docs_faltando[:3]
+                        )
+                        sufixo = f" e mais {len(docs_faltando) - 3}" if len(docs_faltando) > 3 else ""
+
+                        await NotificacaoService.criar(
+                            db,
+                            usuario_id=processo.usuario_id,
+                            processo_id=processo.id,
+                            tipo="despacho_automatico",
+                            titulo=f"Pendências no Processo {processo.numero}",
+                            mensagem=(
+                                f"O processo {processo.numero} atingiu {conformidade_pct:.0f}% de conformidade. "
+                                f"Documentos pendentes: {nomes_faltando}{sufixo}. "
+                                f"Um despacho foi gerado automaticamente. Acesse o processo para mais detalhes."
+                            ),
+                        )
+                        AnaliseService._append_log(processo, "Notificação de pendência criada para o professor.")
+
+                    except Exception as notif_exc:
+                        AnaliseService._append_log(
+                            processo,
+                            f"Aviso: falha ao criar notificação: {notif_exc}",
+                        )
+                        print(f"[DESPACHO AUTO] Falha notificação: {notif_exc}", flush=True)
+
+                except Exception as despacho_exc:
+                    # Se falhar a geração do despacho, continua — o status será PENDENTE_PROFESSOR de qualquer forma
+                    AnaliseService._append_log(
+                        processo,
+                        f"Falha ao gerar despacho automático: {despacho_exc}",
+                    )
+                    print(f"[DESPACHO AUTO] Falha geral: {despacho_exc}", flush=True)
+
+                processo.status = StatusEnum.PENDENTE_PROFESSOR
             else:
                 processo.status = StatusEnum.ANALISE_PENDENTE
                 AnaliseService._append_log(
