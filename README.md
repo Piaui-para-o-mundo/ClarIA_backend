@@ -360,7 +360,7 @@ cat .env
 #### Passo 3: Inicie os containers (API + PostgreSQL)
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 Aguarde até ver mensagens como:
