@@ -1,4 +1,3 @@
-
 """
 Modelo Usuario — Professores e Avaliadores.
 
@@ -20,24 +19,28 @@ from sqlalchemy import Boolean, DateTime, Enum, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+
 class Base(DeclarativeBase):
     """Base class para todos os modelos."""
-    pass
 
+    pass
 
 
 class Role(str, PyEnum):
     """Roles disponiveis"""
-    PROFESSOR = "professor"
-    AVALIADOR = "avaliador"
+
+    PROFESSOR = 'professor'
+    AVALIADOR = 'avaliador'
 
 
 RoleEnum = Role
 
+
 class User(Base):
     """Modelo Usuario — Professores e Avaliadores."""
-    __tablename__ = "usuarios"
-    
+
+    __tablename__ = 'usuarios'
+
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -85,6 +88,6 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-    
+
     def __repr__(self) -> str:
-        return f"<Usuario {self.email} ({self.role})>"
+        return f'<Usuario {self.email} ({self.role})>'

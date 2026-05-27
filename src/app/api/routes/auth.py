@@ -1,4 +1,3 @@
-
 from datetime import timedelta
 from typing import Annotated
 
@@ -17,25 +16,26 @@ from app.core.security import (
 from app.models.user import User
 from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse
 
-router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+router = APIRouter(prefix='/api/v1/auth', tags=['auth'])
 
 bearer_scheme = HTTPBearer()
 
-@router.post("/register", response_model=UserResponse)
+
+@router.post('/register', response_model=UserResponse)
 async def register(
     user_data: UserCreate = Body(...),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Registra novo usuário.
-    
+
     Args:
         user_data: Dados do usuário (nome, email, senha, role).
         db: Sessão de banco.
-        
+
     Returns:
         UserResponse: Usuário criado (sem senha).
-        
+
     Raises:
         HTTPException: Se email já existe.
     """
@@ -47,7 +47,7 @@ async def register(
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email já registrado",
+            detail='Email já registrado',
         )
 
     new_user = User(
@@ -64,22 +64,21 @@ async def register(
     return new_user
 
 
-
-@router.post("/login", response_model=TokenResponse)
+@router.post('/login', response_model=TokenResponse)
 async def login(
     credentials: UserLogin = Body(...),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Autentica usuário e retorna token JWT.
-    
+
     Args:
         credentials: Dados de login (email, senha).
         db: Sessão de banco.
-        
+
     Returns:
         TokenResponse: Token de acesso JWT.
-        
+
     Raises:
         HTTPException: Se credenciais inválidas.
     """
@@ -92,41 +91,41 @@ async def login(
     if not user or not verify_password(credentials.senha, user.senha_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciais inválidas",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail='Credenciais inválidas',
+            headers={'WWW-Authenticate': 'Bearer'},
         )
 
     if not user.ativo:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Usuário inativo",
+            detail='Usuário inativo',
         )
-    
+
     access_token_expires = timedelta(hours=1)
     access_token = create_access_token(
-        data={"sub": str(user.id)},
+        data={'sub': str(user.id)},
         expires_delta=access_token_expires,
     )
 
     return TokenResponse(access_token=access_token)
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get('/me', response_model=UserResponse)
 async def get_current_user_info(
     token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
-): 
+):
     """
     Retorna dados do usuário logado.
-    
+
     Args:
         token: JWT do header Authorization.
         db: Sessão de banco.
-        
+
     Returns:
         UserResponse: Dados do usuário.
     """
     from app.core.dependencies import get_current_user
-    
+
     user = await get_current_user(token.credentials, db)
     return user

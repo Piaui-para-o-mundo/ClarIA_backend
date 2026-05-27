@@ -1,5 +1,3 @@
-
-
 from typing import Literal
 from uuid import UUID
 
@@ -7,12 +5,12 @@ from pydantic import BaseModel, Field, EmailStr
 
 
 class UserCreate(BaseModel):
-    """ Schema para criacao de usuario (registro)."""
+    """Schema para criacao de usuario (registro)."""
 
     nome: str = Field(..., min_length=3, max_length=150)
     email: EmailStr
     senha: str = Field(..., min_length=8, max_length=255)
-    role: Literal["professor", "avaliador"]
+    role: Literal['professor', 'avaliador']
     setor: str | None = Field(default=None, max_length=100)
 
 
@@ -25,24 +23,25 @@ class UserLogin(BaseModel):
 
 class UserResponse(BaseModel):
     """Schema para response de usuário (seguro, sem senha)."""
-    
+
     id: UUID
     nome: str
     email: str
     role: str
     setor: str | None
     ativo: bool
-    
-    model_config = {"from_attributes": True}
+
+    model_config = {'from_attributes': True}
+
 
 class TokenPayload(BaseModel):
     """Payload dentro do JWT."""
-    
+
     sub: str  # User ID
 
 
 class TokenResponse(BaseModel):
     """Response de login com JWT."""
-    
+
     access_token: str
-    token_type: str = "bearer"
+    token_type: str = 'bearer'

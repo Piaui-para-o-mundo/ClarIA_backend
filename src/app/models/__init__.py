@@ -9,10 +9,10 @@ from app.models.user import User
 
 
 __all__ = [
-	"User",
-	"Process",
-	"Processo",
-	"StatusEnum",
-	"AnaliseStatusEnum",
-	"Documento",
+    'User',
+    'Process',
+    'Processo',
+    'StatusEnum',
+    'AnaliseStatusEnum',
+    'Documento',
 ]

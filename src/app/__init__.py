@@ -3,13 +3,13 @@
 Contém os subpacotes da aplicação.
 """
 __all__ = [
-    "core",
-    "api",
-    "models",
-    "schemas",
-    "services",
-    "repositories",
-    "middleware",
-    "utils",
-    "tests",
+    'core',
+    'api',
+    'models',
+    'schemas',
+    'services',
+    'repositories',
+    'middleware',
+    'utils',
+    'tests',
 ]
