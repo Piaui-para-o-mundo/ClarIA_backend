@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Despacho Nº {{ numero_despacho }} – FUESPI-PI</title>
+
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html,
+  body {
+    background: #d8d8d8;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 12pt;
+    color: #000;
+    padding: 20px 0 40px;
+  }
+
+  .page {
+    background: #fff;
+    width: 210mm;
+    min-height: 297mm;
+    padding: 18mm 23mm 18mm 23mm;
+    margin: 0 auto;
+    box-shadow: 0 2px 18px rgba(0,0,0,0.18);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* =========================
+     CABEÇALHO
+  ========================== */
+
+  .header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 6mm;
+  }
+
+  .brasao {
+    width: 42px;
+    height: 52px;
+    margin-bottom: 4px;
+  }
+
+  .header h1 {
+    font-size: 10.5pt;
+    font-weight: bold;
+    line-height: 1.35;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .header-sub {
+    font-size: 8.5pt;
+    line-height: 1.4;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid #000;
+    margin: 5mm 0 6mm;
+  }
+
+  /* =========================
+     META DOCUMENTO
+  ========================== */
+
+  .doc-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 3mm;
+    font-size: 11pt;
+  }
+
+  .despacho-label {
+    font-weight: bold;
+  }
+
+  .processo {
+    font-size: 11pt;
+    font-weight: bold;
+    margin-bottom: 2mm;
+  }
+
+  .para {
+    font-size: 11pt;
+    margin-bottom: 7mm;
+  }
+
+  .para strong {
+    font-weight: bold;
+  }
+
+  .section-title {
+    text-align: center;
+    font-size: 12pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-bottom: 9mm;
+    line-height: 1.4;
+  }
+
+  /* =========================
+     CONTEÚDO
+  ========================== */
+
+  .content {
+    width: 100%;
+  }
+
+  .requerente-block {
+    margin-bottom: 8mm;
+    font-size: 11pt;
+    line-height: 1.6;
+  }
+
+  .requerente-block p {
+    margin-bottom: 2mm;
+    text-align: left;
+  }
+
+  .corpo {
+    width: 100%;
+    font-size: 11pt;
+    line-height: 1.8;
+    text-align: justify;
+  }
+
+  .texto-despacho {
+    width: 100%;
+  }
+
+  .texto-despacho p {
+    margin-bottom: 5mm;
+    text-align: justify;
+    text-indent: 1.5cm;
+    word-break: break-word;
+    hyphens: auto;
+  }
+
+  .texto-despacho p:last-child {
+    margin-bottom: 0;
+  }
+
+  .texto-despacho ol {
+    margin: 0 0 5mm 1.4cm;
+    padding-left: 0.6cm;
+  }
+
+  .texto-despacho ol li {
+    margin-bottom: 3mm;
+    line-height: 1.7;
+    text-align: justify;
+  }
+
+  .ia-bloco {
+    margin-top: 8mm;
+    font-size: 11pt;
+    line-height: 1.7;
+  }
+
+  .ia-bloco h2 {
+    font-size: 11pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-bottom: 2mm;
+  }
+
+  .ia-bloco p {
+    margin-bottom: 3mm;
+    text-align: justify;
+  }
+
+  .ia-lista {
+    margin: 0 0 0 6mm;
+    padding-left: 4mm;
+  }
+
+  .ia-lista li {
+    margin-bottom: 2mm;
+    line-height: 1.6;
+    text-align: justify;
+  }
+
+  .ia-status {
+    display: inline-block;
+    margin-top: 1mm;
+    padding: 1.5mm 3mm;
+    border: 1px solid #444;
+    font-size: 9.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* =========================
+     ASSINATURA
+  ========================== */
+
+  .signature-box,
+  .auth-box {
+    border: 1px solid #777;
+    padding: 8px 10px;
+    margin-top: 8mm;
+    margin-bottom: 5mm;
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+    font-size: 9pt;
+    line-height: 1.5;
+    page-break-inside: avoid;
+  }
+
+  .sei-icon {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 46px;
+  }
+
+  .sei-badge {
+    background: #1e3a78;
+    color: #fff;
+    font-size: 9.5pt;
+    font-weight: bold;
+    font-family: Arial, sans-serif;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+
+  .sei-sub {
+    font-size: 6.5pt;
+    color: #555;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    line-height: 1.2;
+  }
+
+  .signature-text,
+  .auth-text {
+    flex: 1;
+    font-size: 9pt;
+    line-height: 1.6;
+  }
+
+  .signature-text a,
+  .auth-text a {
+    color: #0000cc;
+    text-decoration: underline;
+    word-break: break-word;
+  }
+
+  /* =========================
+     RODAPÉ
+  ========================== */
+
+  .footer {
+    margin-top: auto;
+    padding-top: 4mm;
+    border-top: 0.5px solid #bbb;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+  }
+
+  .footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    line-height: 1.5;
+    gap: 10px;
+  }
+
+  .ref-left {
+    flex: 1;
+  }
+
+  .ref-right {
+    white-space: nowrap;
+  }
+
+  .stamp-bar {
+    margin-top: 4mm;
+    border-top: 1px solid #aaa;
+    padding-top: 2mm;
+    display: flex;
+    justify-content: space-between;
+    font-size: 7.5pt;
+    color: #333;
+    font-family: Arial, sans-serif;
+    page-break-inside: avoid;
+  }
+
+  /* =========================
+     IMPRESSÃO
+  ========================== */
+
+  @media print {
+    html,
+    body {
+      background: #fff;
+      padding: 0;
+    }
+
+    .page {
+      box-shadow: none;
+      margin: 0;
+    }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="page">
+
+  <!-- CABEÇALHO -->
+  <div class="header">
+
+    <svg class="brasao" viewBox="0 0 120 144" xmlns="http://www.w3.org/2000/svg">
+      <path d="M10 10 L110 10 L110 100 Q60 140 10 100 Z" fill="#1a5276" stroke="#b8860b" stroke-width="3"/>
+      <path d="M10 45 L110 45 L110 75 Q60 95 10 75 Z" fill="#1e8449"/>
+      <circle cx="60" cy="35" r="6" fill="#fff"/>
+      <circle cx="40" cy="30" r="4" fill="#f0e68c"/>
+      <circle cx="80" cy="30" r="4" fill="#f0e68c"/>
+      <circle cx="30" cy="55" r="3" fill="#fff"/>
+      <circle cx="90" cy="55" r="3" fill="#fff"/>
+      <text x="60" y="70" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold" font-family="serif">PI</text>
+      <path d="M15 102 Q25 95 35 108 Q25 112 15 102Z" fill="#1e8449"/>
+      <path d="M105 102 Q95 95 85 108 Q95 112 105 102Z" fill="#1e8449"/>
+      <rect x="25" y="110" width="70" height="12" rx="2" fill="#b8860b"/>
+      <text x="60" y="120" text-anchor="middle" fill="#fff" font-size="7" font-weight="bold" font-family="sans-serif">
+        ESTADO DO PIAUÍ
+      </text>
+    </svg>
+
+    <h1>
+      Governo do Estado do Piauí<br>
+      Fundação Universidade Estadual do Piauí – FUESPI-PI<br>
+      Comissão Permanente do Pessoal Docente – FUESPI-PI
+    </h1>
+
+    <div class="header-sub">
+      Rua João Cabral, 2231 Norte - Bairro Pirajá, Teresina/PI, CEP 64002-150<br>
+      Telefone: - https://www.uespi.br
+    </div>
+
+  </div>
+
+  <hr>
+
+  <!-- META -->
+  <div class="doc-meta">
+    <span class="despacho-label">
+      DESPACHO Nº: {{ numero_despacho }}
+    </span>
+
+    <span>
+      {{ emitido_em }}
+    </span>
+  </div>
+
+  <div class="processo">
+    PROCESSO Nº: {{ processo_numero }}
+  </div>
+
+  <div class="para">
+    <strong>PARA:</strong> {{ setor_destino_sugerido }}
+  </div>
+
+  <div class="section-title">
+    {{ assunto }}
+  </div>
+
+  <!-- CONTEÚDO -->
+  <div class="content">
+
+    <div class="requerente-block">
+
+      <p>
+        <strong>Requerente:</strong>
+        {{ professor_nome }}
+
+        {% if professor_matricula %}
+          — Professor(a) — Matrícula {{ professor_matricula }}
+        {% else %}
+          — Professor(a)
+        {% endif %}
+      </p>
+
+      <p>
+        <strong>Lotação:</strong>
+        {{ professor_setor }}
+      </p>
+
+    </div>
+
+    <div class="corpo">
+
+      {% if corpo_despacho %}
+        <div class="texto-despacho">
+
+          {% for paragrafo in corpo_despacho.split('\n\n') %}
+
+            {% if paragrafo.strip() %}
+              <p>{{ paragrafo.strip() }}</p>
+            {% endif %}
+
+          {% endfor %}
+
+        </div>
+      {% endif %}
+
+    </div>
+
+    {% if justificativa_encaminhamento or referencias_normativas or status_sugerido %}
+      <div class="ia-bloco">
+
+        {% if justificativa_encaminhamento %}
+          <h2>Justificativa do Encaminhamento</h2>
+          <p>{{ justificativa_encaminhamento }}</p>
+        {% endif %}
+
+        {% if referencias_normativas %}
+          <h2>Referências Normativas</h2>
+          <ul class="ia-lista">
+            {% for referencia in referencias_normativas %}
+              {% if referencia.strip() %}
+                <li>{{ referencia.strip() }}</li>
+              {% endif %}
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {% if status_sugerido %}
+          <div class="ia-status">Status sugerido: {{ status_sugerido }}</div>
+        {% endif %}
+
+      </div>
+    {% endif %}
+
+  </div>
+
+  <!-- ASSINATURA -->
+  <div class="signature-box">
+
+    <div class="sei-icon">
+      <div class="sei-badge">sei</div>
+      <div class="sei-sub">
+        assinatura<br>
+        eletrônica
+      </div>
+    </div>
+
+    <div class="signature-text">
+      Documento assinado eletronicamente por
+      <strong>{{ avaliador_nome }}</strong>,
+      <strong>{{ avaliador_cargo }}</strong>,
+      em {{ emitido_em }}.
+    </div>
+
+  </div>
+
+  <!-- AUTENTICAÇÃO -->
+  <div class="auth-box">
+
+    <svg viewBox="0 0 52 52"
+         xmlns="http://www.w3.org/2000/svg"
+         style="width:54px;height:54px;flex-shrink:0;">
+
+      <rect width="52" height="52" fill="#fff"/>
+
+      <rect x="2" y="2" width="16" height="16" fill="#000"/>
+      <rect x="4" y="4" width="12" height="12" fill="#fff"/>
+      <rect x="6" y="6" width="8" height="8" fill="#000"/>
+
+      <rect x="34" y="2" width="16" height="16" fill="#000"/>
+      <rect x="36" y="4" width="12" height="12" fill="#fff"/>
+      <rect x="38" y="6" width="8" height="8" fill="#000"/>
+
+      <rect x="2" y="34" width="16" height="16" fill="#000"/>
+      <rect x="4" y="36" width="12" height="12" fill="#fff"/>
+      <rect x="6" y="38" width="8" height="8" fill="#000"/>
+
+    </svg>
+
+    <div class="auth-text">
+
+      A autenticidade deste documento pode ser conferida no site
+
+      <a href="https://sei.pi.gov.br/sei/controlador_externo.php?acao=documento_conferir&id_orgao_acesso_externo=0">
+        https://sei.pi.gov.br/sei/controlador_externo.php?acao=documento_conferir&id_orgao_acesso_externo=0
+      </a>
+
+      informando o código verificador
+      <strong>{{ numero_despacho }}</strong>
+      e o código CRC
+      <strong>XXXXXXXX</strong>.
+
+    </div>
+
+  </div>
+
+  <!-- RODAPÉ -->
+  <div class="footer">
+
+    <div class="footer-row">
+
+      <div class="ref-left">
+        <strong>Referência:</strong>
+        Caso responda este Documento, indicar expressamente o Processo nº {{ processo_numero }}
+      </div>
+
+      <div class="ref-right">
+        SEI nº {{ numero_despacho }}
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- BARRA FINAL -->
+  <div class="stamp-bar">
+    <span>Despacho {{ numero_despacho }}</span>
+    <span>SEI {{ processo_numero }} / pg. 1</span>
+  </div>
+
+</div>
+
+</body>
+</html>

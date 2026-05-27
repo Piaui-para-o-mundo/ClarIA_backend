@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from uuid import UUID
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -44,7 +45,7 @@ class AnaliseService:
         processo_id: UUID,
         rag_client: RagClient,
     ) -> Processo | None:
-        """Executa a análise automática de forma idempotente."""
+        """Executa a análise automática de forma idempotente (apenas conformidade)."""
 
         processo = await AnaliseService.obter_processo_lock(db=db, processo_id=processo_id)
         if not processo:
@@ -68,7 +69,7 @@ class AnaliseService:
         processo.analise_started_em = datetime.now(timezone.utc)
         processo.analise_concluida_em = None
         processo.analise_erro = None
-        AnaliseService._append_log(processo, "Análise automática iniciada.")
+        AnaliseService._append_log(processo, "Análise automática iniciada (etapa 1).")
         await db.flush()
 
         try:
@@ -87,43 +88,47 @@ class AnaliseService:
             if not docs_para_rag:
                 raise ValueError("Não foi possível ler o conteúdo dos PDFs no disco.")
 
-            print(f"[ANALISE BACKGROUND] Chamando /ia/analisar para processo {processo_id}", flush=True)
-            AnaliseService._append_log(processo, "Enviando documentos físicos para a IA (RAG V2).")
+            print(f"[ANALISE BACKGROUND] Iniciando Etapa 1: Conformidade para {processo_id}", flush=True)
+            AnaliseService._append_log(processo, "Enviando PDFs para /ia/conformidade...")
             
-            resposta_ia = await rag_client.analisar_processo(
+            # Etapa 1: Conformidade (Rápida, Regex/Cache + LLM Classificador)
+            conformidade = await rag_client.verificar_conformidade(
                 documentos=docs_para_rag,
-                tipo_processo=processo.tipo,
+                type_process=processo.tipo,
             )
-
-            # Nova estrutura de resposta da ClarIA RAG
-            checklist = resposta_ia.get("checklist", {})
-            despacho = resposta_ia.get("despacho", {})
+            checklist_result = conformidade.get("checklist") or conformidade
             
-            conformidade_pct = float(checklist.get("conformidade_pct", 0) or 0)
+            # O checklist_ia salva os textos extraídos para que a função gerar_resumo() não precise re-extrair os PDFs do disco.
+            processo.checklist_ia = json.dumps(conformidade, ensure_ascii=False)
             
-            processo.resumo_ia = resposta_ia.get("resumo")
-            processo.checklist_ia = json.dumps(resposta_ia, ensure_ascii=False)
+            # Determina status final do processo baseado no checklist
+            aprovado = bool(checklist_result.get("aprovado"))
+            conformidade_pct = checklist_result.get("conformidade_pct")
+            if conformidade_pct is None:
+                conformidade_pct = 100.0 if aprovado else 0.0
+            else:
+                conformidade_pct = float(conformidade_pct or 0)
+                
+            AnaliseService._append_log(processo, "Checklist concluído. Resumo e despacho pendentes de solicitação manual.")
             
             if conformidade_pct < 100:
-                processo.despacho_automatico = despacho.get("corpo_despacho")
                 processo.status = StatusEnum.PENDENTE_PROFESSOR
                 AnaliseService._append_log(
                     processo,
-                    f"Conformidade parcial ({conformidade_pct:.2f}%). Despacho sugerido gerado.",
+                    f"Conformidade parcial ({conformidade_pct:.2f}%).",
                 )
             else:
-                processo.despacho_automatico = despacho.get("corpo_despacho")
                 processo.status = StatusEnum.ANALISE_PENDENTE
                 AnaliseService._append_log(
                     processo,
-                    f"Conformidade total ({conformidade_pct:.2f}%). Análise concluída.",
+                    f"Conformidade total ({conformidade_pct:.2f}%).",
                 )
+                
             processo.analise_status = AnaliseStatusEnum.COMPLETED.value
             processo.analise_concluida_em = datetime.now(timezone.utc)
             processo.analise_erro = None
 
-            AnaliseService._append_log(processo, "Análise automática IA concluída com sucesso.")
-            await db.flush()
+            AnaliseService._append_log(processo, "Análise automática IA (etapa 1) concluída com sucesso.")
             return processo
 
         except Exception as exc:
@@ -134,6 +139,85 @@ class AnaliseService:
             AnaliseService._append_log(processo, f"Falha na comunicação com RAG: {exc}")
             await db.flush()
             return processo
+
+    @staticmethod
+    async def gerar_resumo(
+        db: AsyncSession,
+        processo_id: UUID,
+        rag_client: RagClient,
+    ) -> Processo | None:
+        """Gera o resumo sob demanda a partir dos textos extraídos na conformidade."""
+        processo = await AnaliseService.obter_processo_lock(db=db, processo_id=processo_id)
+        if not processo:
+            return None
+
+        if not processo.checklist_ia:
+            raise ValueError("Conformidade ainda não foi verificada.")
+
+        conformidade = json.loads(processo.checklist_ia)
+        checklist_result = conformidade.get("checklist") or conformidade
+
+        # Etapa 2: Resumo
+        print(f"[ANALISE MANUAL] Iniciando Etapa 2: Resumo para {processo_id}", flush=True)
+        
+        textos_extraidos = conformidade.get("textos_extraidos") or []
+        if textos_extraidos:
+            try:
+                resumo_response = await rag_client.gerar_resumo(
+                    tipo_processo=processo.tipo,
+                    textos_extraidos=textos_extraidos,
+                )
+                processo.resumo_ia = rag_client._extrair_texto(
+                    resumo_response, ("resumo", "texto", "conteudo", "analise", "resultado")
+                )
+                AnaliseService._append_log(processo, "Resumo manual concluído com sucesso.")
+            except httpx.HTTPError as exc:
+                processo.resumo_ia = "Erro de comunicação com a API do RAG."
+                AnaliseService._append_log(processo, f"Falha no RAG ao gerar resumo: {exc}")
+        else:
+            processo.resumo_ia = "Não foi possível gerar o resumo pois não há textos extraídos dos documentos."
+            AnaliseService._append_log(processo, "Resumo falhou: Falta de textos extraídos.")
+        
+        # COMITA IMEDIATAMENTE para o frontend exibir o resumo
+        await db.commit()
+        return processo
+
+    @staticmethod
+    async def gerar_despacho(
+        db: AsyncSession,
+        processo_id: UUID,
+        rag_client: RagClient,
+    ) -> Processo | None:
+        """Gera o despacho sob demanda a partir do checklist e resumo (se existir)."""
+        processo = await AnaliseService.obter_processo_lock(db=db, processo_id=processo_id)
+        if not processo:
+            return None
+
+        if not processo.checklist_ia:
+            raise ValueError("Conformidade ainda não foi verificada.")
+
+        conformidade = json.loads(processo.checklist_ia)
+        checklist_result = conformidade.get("checklist") or conformidade
+
+        # Etapa 3: Despacho
+        print(f"[ANALISE MANUAL] Iniciando Etapa 3: Despacho para {processo_id}", flush=True)
+
+        resumo_texto = processo.resumo_ia or ""
+        try:
+            despacho_response = await rag_client.sugerir_despacho(
+                checklist_result=checklist_result,
+                resumo_texto=resumo_texto,
+                integridade_result=conformidade.get("integridade")
+            )
+            # Salva o JSON completo da IA (contém corpo_despacho + setor_destino_sugerido + status_sugerido)
+            processo.despacho_automatico = json.dumps(despacho_response, ensure_ascii=False)
+            AnaliseService._append_log(processo, "Despacho manual concluído com sucesso.")
+        except httpx.HTTPError as exc:
+            processo.despacho_automatico = "Erro de comunicação com a API do RAG."
+            AnaliseService._append_log(processo, f"Falha no RAG ao gerar despacho: {exc}")
+
+        await db.commit()
+        return processo
 
     @staticmethod
     async def disparar_analise_em_background(processo_id: UUID) -> None:

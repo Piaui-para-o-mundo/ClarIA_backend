@@ -10,11 +10,18 @@ from app.schemas.documento import DocumentoResponse
 class ProcessoCreate(BaseModel):
     """Schema para criação de processo."""
     tipo: Literal[
-        "progressao_funcional",
-        "promocao",
-        "afastamento_mestrado",
+        "afastamento_pos_graduacao",
+        "afastamento_pos_doutorado",
+        "alteracao_regime_dedicacao_exclusiva",
+        "alteracao_regime_tp20h_para_ti40h",
+        "alteracao_regime_reducao",
+        "estagio_probatorio",
+        "licenca_capacitacao",
         "licenca_premio",
-        "outros"
+        "progressao_funcional",
+        "promocao_titulo",
+        "promocao_associado",
+        "promocao_titular"
     ]
 
 
@@ -39,6 +46,8 @@ class ProcessoResponse(BaseModel):
     numero: str
     tipo: str
     status: str
+    analise_status: str | None = None
+    analise_erro: str | None = None
     usuario_id: UUID
     setor_remetente: str | None = None
     # Resultado da análise automática pelo RAG (preenchido pelo BackgroundTask)

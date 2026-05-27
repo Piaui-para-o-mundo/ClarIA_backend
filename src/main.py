@@ -4,15 +4,37 @@ Ponto de entrada da API, configuração inicial e roteamento.
 """
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.database import close_db, init_db
-from app.api.routes import auth, processos, analise
+from app.api.routes import auth, processos, analise, dispatch
+
+
+def _sanitize_validation_payload(value: Any) -> Any:
+    """Remove bytes brutos de erros de validação antes de serializar a resposta."""
+
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return "<binary payload omitted>"
+
+    if isinstance(value, dict):
+        return {key: _sanitize_validation_payload(item) for key, item in value.items()}
+
+    if isinstance(value, list):
+        return [_sanitize_validation_payload(item) for item in value]
+
+    if isinstance(value, tuple):
+        return tuple(_sanitize_validation_payload(item) for item in value)
+
+    return value
 
 
 @asynccontextmanager
@@ -46,6 +68,17 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        """Evita que erros de validação exponham corpos binários na resposta 422."""
+
+        del request
+        detail = _sanitize_validation_payload(jsonable_encoder(exc.errors()))
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": detail},
+        )
 
     # Configuração de CORS
     # Nota: allow_origins=["*"] não pode ser usado com allow_credentials=True
@@ -85,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(processos.router)
     app.include_router(analise.router)
+    app.include_router(dispatch.router)
 
     return app
 

@@ -1,4 +1,3 @@
-
 from typing import Annotated
 from uuid import UUID
 import asyncio
@@ -90,7 +89,7 @@ async def listar_processos(
         limit=limit,
     )
 
-    return [ProcessoResumo.from_orm(p) for p in processos]
+    return [ProcessoResumo.model_validate(p) for p in processos]
 
 @router.get("/my", response_model=list[ProcessoResumo])
 async def list_my_processos(
@@ -119,7 +118,7 @@ async def list_my_processos(
         limit=limit,
     )
 
-    return [ProcessoResumo.from_orm(p) for p in processos]
+    return [ProcessoResumo.model_validate(p) for p in processos]
 
 @router.get("/{processo_id}", response_model=ProcessoResponse)
 async def get_processo(
@@ -258,6 +257,15 @@ async def upload_documentos(
             processo_id=processo_id,
             novo_status=StatusEnum.ANALISE_PENDENTE,
         )
+
+        processo.analise_status = AnaliseStatusEnum.PENDING.value
+        processo.analise_started_em = None
+        processo.analise_concluida_em = None
+        processo.analise_erro = None
+        processo.resumo_ia = None
+        processo.checklist_ia = None
+        processo.despacho_automatico = None
+        processo.analise_log = None
     
     # Commit no banco
     await db.commit()
@@ -268,7 +276,7 @@ async def upload_documentos(
     )
 
     print(
-        f"[ANALISE BACKGROUND] Análise enfileirada após upload para processo {processo_id}",
+        f"[ANALISE BACKGROUND] Análise enfileirada após upload para processo {processo.numero} ({processo_id})",
         flush=True,
     )
     
@@ -390,7 +398,7 @@ async def iniciar_analise_processo(
     )
 
     print(
-        f"[ANALISE BACKGROUND] Análise manual enfileirada para processo {processo_id}",
+        f"[ANALISE BACKGROUND] Análise manual enfileirada para processo {processo.numero} ({processo_id})",
         flush=True,
     )
 
@@ -406,4 +414,3 @@ async def iniciar_analise_processo(
         checklist_ia=processo.checklist_ia,
         despacho_automatico=processo.despacho_automatico,
     )
-
