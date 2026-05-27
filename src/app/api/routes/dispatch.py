@@ -17,7 +17,6 @@ from app.services.processo_service import ProcessoService
 
 router = APIRouter(prefix="/api/v1/dispatch", tags=["dispatch"])
 bearer_scheme = HTTPBearer()
-bearer_scheme_opt = HTTPBearer(auto_error=False)
 
 TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "template"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -92,43 +91,49 @@ def _generate_pdf(html: str) -> bytes:
     return HTML(string=html, base_url=str(TEMPLATE_DIR)).write_pdf()
 
 
-@router.get("/pdf-preview/{processo_id}")
+@router.post("/pdf-preview/{processo_id}")
 async def pdf_preview(
     processo_id: UUID,
-    corpo_editado: str | None = None,
-    token: str | None = None,
+    payload: DispatchPayload,
     db: AsyncSession = Depends(get_db),
 ):
-    """Gera um PDF temporário do despacho para visualização no frontend sem exigir token (facilita abertura em nova aba)."""
+    """Gera um PDF temporário do despacho para visualização no frontend."""
     processo = await ProcessoService.get_processo(db=db, processo_id=str(processo_id))
     if not processo:
         raise HTTPException(status_code=404, detail="Processo não encontrado")
 
-    user = None
-    if token:
-        try:
-            user = await get_current_user(token, db)
-        except Exception:
-            pass
-
     usuario = getattr(processo, 'usuario', None)
+    
+    # Substitui placeholders no corpo do despacho
+    corpo_despacho = payload.corpo_despacho
+    replacements = {
+        "[numero_processo]": processo.numero,
+        "[nome_requerente]": _get_user_attr(usuario, 'nome', 'N/A'),
+        "[cargo]": _get_user_attr(usuario, 'cargo', 'N/A'),
+        "[matricula]": _get_user_attr(usuario, 'matricula', 'N/A'),
+        "[lotacao]": _get_user_attr(usuario, 'setor', 'N/A'),
+        "[AUTORIDADE]": payload.setor_destino_sugerido,
+        "[DATA_ATUAL]": datetime.utcnow().strftime('%d/%m/%Y'),
+    }
+    for p, v in replacements.items():
+        corpo_despacho = corpo_despacho.replace(p, v)
+
+    # Usa os dados vindos do payload (editados no frontend)
     context = {
-        "processo_numero": processo.numero,
-        "setor_destino_sugerido": processo.setor_remetente, # Exemplo
-        "assunto": f"Análise de {processo.tipo}",
+        "processo_numero": payload.processo_numero or processo.numero,
+        "setor_destino_sugerido": payload.setor_destino_sugerido,
+        "assunto": payload.assunto,
         "professor_nome": _get_user_attr(usuario, 'nome', 'N/A'),
         "professor_setor": _get_user_attr(usuario, 'setor', 'N/A'),
         "professor_matricula": _get_user_attr(usuario, 'matricula', 'N/A'),
         "emitido_em": datetime.utcnow().strftime('%d/%m/%Y'),
-        "corpo_despacho": corpo_editado or processo.despacho_automatico or "Despacho não gerado.",
-        "numero_despacho": "PREVIEW/2026",
-        "avaliador_nome": _get_user_attr(user, 'nome', 'CPPD') if user else "CPPD",
-        "avaliador_setor": _get_user_attr(user, 'setor', '[Setor do Avaliador]') if user else "[Setor do Avaliador]",
-        "avaliador_cargo": getattr(user, 'role', 'avaliador') if user else "Avaliador",
+        "corpo_despacho": corpo_despacho,
+        "numero_despacho": payload.numero_despacho or "PREVIEW/2026"
     }
 
     try:
-        pdf_bytes = _generate_pdf(_render_dispatch_html(context))
+        html = _render_dispatch_html(context)
+        pdf_bytes = _generate_pdf(html)
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
@@ -140,27 +145,11 @@ async def pdf_preview(
 
 
 @router.post("/preview", response_class=HTMLResponse)
-async def render_preview(
-    request: Request,
-    payload: DispatchPayload,
-    token: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme_opt)] = None,
-    db: AsyncSession = Depends(get_db),
-):
-    user = None
-    if token:
-        try:
-            user = await get_current_user(token.credentials, db)
-        except Exception:
-            pass
-
+async def render_preview(request: Request, payload: DispatchPayload):
     context = payload.model_dump()
     context.update({
         "request": request,
         "processo_numero": payload.processo_numero or "",
-        "emitido_em": datetime.utcnow().strftime('%d/%m/%Y'),
-        "avaliador_nome": _get_user_attr(user, 'nome', 'CPPD') if user else "CPPD",
-        "avaliador_setor": _get_user_attr(user, 'setor', '[Setor do Avaliador]') if user else "[Setor do Avaliador]",
-        "avaliador_cargo": getattr(user, 'role', 'avaliador') if user else "Avaliador",
     })
     return templates.TemplateResponse(request=request, name="dispatch.html", context=context)
 
@@ -200,10 +189,6 @@ async def send_despacho_to_processo(
         "professor_setor": _get_user_attr(usuario, 'setor', ''),
         "professor_matricula": _get_user_attr(usuario, 'matricula', ''),
         "emitido_em": datetime.utcnow().strftime('%d/%m/%Y'),
-        # Assinatura: usar dados do avaliador (usuário autenticado que envia o despacho)
-        "avaliador_nome": _get_user_attr(user, 'nome', ''),
-        "avaliador_setor": _get_user_attr(user, 'setor', ''),
-        "avaliador_cargo": getattr(user, 'role', 'avaliador') if user else 'avaliador',
     })
     
     try:

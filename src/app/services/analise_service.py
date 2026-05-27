@@ -29,39 +29,6 @@ class AnaliseService:
             processo.analise_log = entrada
 
     @staticmethod
-    def _gerar_despacho_fallback(processo: Processo, checklist_result: dict, resumo_texto: str) -> str:
-        """Gera um despacho mínimo quando o serviço RAG não está disponível."""
-
-        conformidade = checklist_result.get("conformidade_pct")
-        documentos_faltando = checklist_result.get("documentos_faltando") or []
-        aprovado = bool(checklist_result.get("aprovado"))
-
-        linhas = [
-            "DESPACHO AUTOMÁTICO PROVISÓRIO",
-            f"Processo: {processo.numero}",
-            f"Tipo: {processo.tipo}",
-        ]
-
-        if conformidade is not None:
-            linhas.append(f"Conformidade: {conformidade}%")
-
-        if aprovado:
-            linhas.append("Conclusão: documentação suficiente para prosseguimento.")
-        else:
-            linhas.append("Conclusão: documentação pendente de complementação.")
-
-        if documentos_faltando:
-            faltantes = ", ".join(str(item) for item in documentos_faltando)
-            linhas.append(f"Pendências: {faltantes}")
-
-        if resumo_texto:
-            linhas.append("")
-            linhas.append("Resumo executivo:")
-            linhas.append(resumo_texto.strip())
-
-        return "\n".join(linhas).strip()
-
-    @staticmethod
     async def obter_processo_lock(db: AsyncSession, processo_id: UUID) -> Processo | None:
         stmt = (
             select(Processo)
@@ -200,14 +167,13 @@ class AnaliseService:
                     tipo_processo=processo.tipo,
                     textos_extraidos=textos_extraidos,
                 )
-                processo.resumo_ia = rag_client._extrair_resumo_texto(resumo_response)
+                processo.resumo_ia = rag_client._extrair_texto(
+                    resumo_response, ("resumo", "texto", "conteudo", "analise", "resultado")
+                )
                 AnaliseService._append_log(processo, "Resumo manual concluído com sucesso.")
-            except httpx.HTTPStatusError as exc:
-                processo.resumo_ia = "Erro na API do RAG."
-                AnaliseService._append_log(processo, f"Erro HTTP no RAG ao gerar resumo: {exc.response.status_code} - {exc.response.text}")
-            except httpx.RequestError as exc:
-                processo.resumo_ia = "Serviço RAG indisponível ou ocorreu um timeout."
-                AnaliseService._append_log(processo, f"Erro de conexão/timeout no RAG ao gerar resumo: {exc}")
+            except httpx.HTTPError as exc:
+                processo.resumo_ia = "Erro de comunicação com a API do RAG."
+                AnaliseService._append_log(processo, f"Falha no RAG ao gerar resumo: {exc}")
         else:
             processo.resumo_ia = "Não foi possível gerar o resumo pois não há textos extraídos dos documentos."
             AnaliseService._append_log(processo, "Resumo falhou: Falta de textos extraídos.")
@@ -243,28 +209,12 @@ class AnaliseService:
                 resumo_texto=resumo_texto,
                 integridade_result=conformidade.get("integridade")
             )
-            processo.despacho_automatico = rag_client._extrair_despacho_texto(despacho_response)
+            # Salva o JSON completo da IA (contém corpo_despacho + setor_destino_sugerido + status_sugerido)
+            processo.despacho_automatico = json.dumps(despacho_response, ensure_ascii=False)
             AnaliseService._append_log(processo, "Despacho manual concluído com sucesso.")
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.RequestError) as exc:
-            processo.despacho_automatico = AnaliseService._gerar_despacho_fallback(
-                processo=processo,
-                checklist_result=checklist_result,
-                resumo_texto=resumo_texto,
-            )
-            AnaliseService._append_log(
-                processo,
-                f"RAG indisponível, despacho provisório gerado localmente: {exc}",
-            )
-        except httpx.HTTPStatusError as exc:
-            processo.despacho_automatico = AnaliseService._gerar_despacho_fallback(
-                processo=processo,
-                checklist_result=checklist_result,
-                resumo_texto=resumo_texto,
-            )
-            AnaliseService._append_log(
-                processo,
-                f"Erro na API do RAG ({exc.response.status_code}), despacho provisório gerado localmente.",
-            )
+        except httpx.HTTPError as exc:
+            processo.despacho_automatico = "Erro de comunicação com a API do RAG."
+            AnaliseService._append_log(processo, f"Falha no RAG ao gerar despacho: {exc}")
 
         await db.commit()
         return processo

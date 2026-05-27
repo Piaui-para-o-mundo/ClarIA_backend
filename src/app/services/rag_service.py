@@ -1,5 +1,6 @@
-from typing import Any, AsyncGenerator
+import asyncio
 import json
+from typing import Any, AsyncGenerator
 import httpx
 
 from app.core.config import get_settings
@@ -14,24 +15,27 @@ class RagClient:
     """
 
     def __init__(self, base_url: str, timeout: int = 120):
-        """
-        Inicializa o cliente.
-
-        Args:
-            base_url: URL base do serviço RAG.
-            timeout: Timeout em segundos para requisições (default: 120).
-        """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.client = httpx.AsyncClient(timeout=httpx.Timeout(timeout))
     
+    async def _post_with_retry(self, endpoint: str, max_retries: int = 3, **kwargs) -> dict[str, Any]:
+        """Faz um POST com retentativas em erros de rede ou servidor (5xx)."""
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.post(f"{self.base_url}{endpoint}", **kwargs)
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                # Não retenta em caso de erro 4xx (problema na requisição), apenas 5xx
+                if e.response.status_code < 500 or attempt == max_retries - 1:
+                    raise
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                if attempt == max_retries - 1:
+                    raise
+            await asyncio.sleep(2 ** attempt)
+
     async def health_check(self) -> bool:
-        """
-        Verifica saúde do serviço RAG.
-        
-        Returns:
-            bool: True se RAG está healthy, False caso contrário.
-        """
         try:
             response = await self.client.get(f"{self.base_url}/ia/health")
             return response.status_code == 200
@@ -43,24 +47,8 @@ class RagClient:
         documentos: list[tuple[bytes, str]],
         type_process: str,
     ) -> dict[str, Any]:
-        """
-        Solicita verificação de conformidade documental enviando PDFs.
-        
-        Alinhado com a rota POST /ia/conformidade que espera:
-        - files: List[UploadFile] (multipart)
-        - type_process: str (form field)
-        
-        Retorna dict com:
-        - status: "completo" | "incompleto"
-        - checklist: {...}
-        - documentos_identificados: [...]
-        - textos_extraidos: [{"nome": str, "texto": str}, ...]
-        """
-        files = [
-            ("files", (nome, conteudo, "application/pdf"))
-            for conteudo, nome in documentos
-        ]
-
+        files = [("files", (nome, conteudo, "application/pdf")) for conteudo, nome in documentos]
+        # Não usaremos _post_with_retry aqui pois arquivos grandes não devem ser re-enviados sem critério
         response = await self.client.post(
             f"{self.base_url}/ia/conformidade",
             files=files,
@@ -69,43 +57,17 @@ class RagClient:
         response.raise_for_status()
         return response.json()
 
-    async def gerar_resumo(
-        self,
-        tipo_processo: str,
-        textos_extraidos: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """
-        Solicita resumo executivo com base nos textos já extraídos.
-        
-        Alinhado com a rota POST /ia/resumo (ResumoRequest):
-        - texto: str (campo legado, pode ser vazio)
-        - tipo_processo: str
-        - textos_extraidos: list[dict] com {nome, texto}
-        
-        Retorna dict com:
-        - resumo: {status, modulo, arquivos_analisados, resultado: {...}}
-        """
+    async def gerar_resumo(self, tipo_processo: str, textos_extraidos: list[dict[str, Any]]) -> dict[str, Any]:
         try:
-            response = await self.client.post(
-                f"{self.base_url}/ia/resumo",
-                json={
-                    "texto": "",  # Campo legado, não usado na nova arquitetura
-                    "tipo_processo": tipo_processo,
-                    "textos_extraidos": textos_extraidos,
-                },
+            return await self._post_with_retry(
+                "/ia/resumo",
+                json={"texto": "", "tipo_processo": tipo_processo, "textos_extraidos": textos_extraidos}
             )
-            response.raise_for_status()
-            return response.json()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 422 and textos_extraidos:
                 # Fallback: Junta tudo em uma string para a rota legada
                 texto_legado = "\n".join([f"{t.get('nome', '')}\n{t.get('texto', '')}".strip() for t in textos_extraidos])
-                resp_legado = await self.client.post(
-                    f"{self.base_url}/ia/resumo",
-                    json={"texto": texto_legado}
-                )
-                resp_legado.raise_for_status()
-                return resp_legado.json()
+                return await self._post_with_retry("/ia/resumo", json={"texto": texto_legado})
             raise
 
     async def sugerir_despacho(
@@ -114,234 +76,110 @@ class RagClient:
         resumo_texto: str = "",
         integridade_result: dict[str, Any] = None,
     ) -> dict[str, Any]:
-        """
-        Solicita minuta de despacho a partir do checklist e do resumo executivo.
-        
-        Alinhado com a rota POST /ia/despacho (DespachoRequest):
-        - texto: str (resumo executivo ou descrição do processo)
-        - pendencias: str (lista de pendências em JSON ou texto)
-        
-        Retorna dict com corpo_despacho, etc.
-        """
-        # Montar o texto descritivo do processo para o LLM
         tipo_processo = checklist_result.get("tipo_processo", "não especificado")
         conformidade = checklist_result.get("conformidade_pct", "N/A")
         aprovado = checklist_result.get("aprovado", False)
         tramitacao = checklist_result.get("tramitacao_prevista", [])
         
-        texto = f"Tipo de processo: {tipo_processo}\n"
-        texto += f"Conformidade: {conformidade}%\n"
-        texto += f"Aprovado: {'Sim' if aprovado else 'Não'}\n"
-        
+        texto_partes = [
+            f"Tipo de processo: {tipo_processo}",
+            f"Conformidade: {conformidade}%",
+            f"Aprovado: {'Sim' if aprovado else 'Não'}"
+        ]
         if tramitacao:
-            texto += f"Fluxo de Tramitação (Ordem dos Setores): {' -> '.join(tramitacao)}\n"
-
+            texto_partes.append(f"Fluxo de Tramitação: {' -> '.join(tramitacao)}")
         if resumo_texto:
-            texto += f"\nResumo Executivo:\n{resumo_texto}\n"
+            texto_partes.append(f"\nResumo Executivo:\n{resumo_texto}")
+            
+        texto_completo = "\n".join(texto_partes) + "\n"
         
-        # Extrair pendências do checklist e integridade para enviar como JSON string
         pendencias_list = checklist_result.get("documentos_faltando", [])
-        
         if integridade_result and not integridade_result.get("aprovado", True):
-            for erro in integridade_result.get("erros", []):
-                pendencias_list.append({
-                    "tipo_documento": erro.get("documento", ""),
-                    "descricao": erro.get("descricao", ""),
-                    "observacao": erro.get("sugestao", "")
-                })
+            pendencias_list.extend([
+                {"tipo_documento": erro.get("documento", ""), "descricao": erro.get("descricao", ""), "observacao": erro.get("sugestao", "")}
+                for erro in integridade_result.get("erros", [])
+            ])
 
-        # Extrair PONTOS DE ATENÇÃO do resumo_texto para reforçar ao LLM de Despacho
+        import re
         if resumo_texto:
-            import re
-            # Busca a tag PONTOS DE ATENÇÃO (ou similar) no resumo
             match = re.search(r'PONTOS? DE ATENÇÃO:(.*?)(?:\n\n|\Z)', resumo_texto, re.IGNORECASE | re.DOTALL)
             if match:
-                pontos_atencao = match.group(1).strip()
-                # Ignorar se o LLM apenas respondeu que não há pendências
-                negativas = ("nenhum", "não há", "n/a", "não identificado", "sem inconsist", "nenhuma")
-                if pontos_atencao and not pontos_atencao.lower().startswith(negativas):
-                    pendencias_list.append({
-                        "tipo_documento": "Análise Técnica",
-                        "descricao": "Inconsistências encontradas durante a leitura detalhada dos documentos.",
-                        "observacao": pontos_atencao
-                    })
+                pontos = match.group(1).strip()
+                if pontos and not pontos.lower().startswith(("nenhum", "não há", "n/a")):
+                    pendencias_list.append({"tipo_documento": "Análise Técnica", "descricao": "Inconsistências encontradas.", "observacao": pontos})
 
-        if pendencias_list:
-            pendencias_str = json.dumps(pendencias_list, ensure_ascii=False)
-        else:
-            pendencias_str = "Nenhuma pendência identificada."
+        pendencias_str = json.dumps(pendencias_list, ensure_ascii=False) if pendencias_list else "Nenhuma pendência."
 
-        try:
-            response = await self.client.post(
-                f"{self.base_url}/ia/despacho",
-                json={
-                    "texto": texto,
-                    "pendencias": pendencias_str,
-                },
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 422:
-                # Fallback: modelo legado do /ia/despacho
-                resp_legado = await self.client.post(
-                    f"{self.base_url}/ia/despacho",
-                    json={
-                        "texto": resumo_texto,
-                        "pendencias": "\n".join(pendencias_list) if pendencias_list else "",
-                    }
-                )
-                resp_legado.raise_for_status()
-                return resp_legado.json()
-            raise
-
-    async def analisar_processo(
-        self,
-        documentos: list[tuple[bytes, str]],
-        tipo_processo: str,
-    ) -> dict[str, Any]:
-        """
-        Executa o fluxo completo da ClarIA RAG:
-        1. /ia/conformidade → recebe PDFs e devolve checklist + textos extraídos
-        2. /ia/resumo       → trabalha com os textos extraídos em JSON
-        3. /ia/despacho     → gera minuta final com base no checklist e resumo
-
-        Args:
-            documentos: Lista de tuplas (bytes_do_pdf, nome_do_arquivo).
-            tipo_processo: Tipo do processo (ex: 'progressao_funcional').
-
-        Returns:
-            dict com: checklist, resumo (string), despacho (string), 
-                      documentos_identificados, textos_extraidos
-        """
-        # ── ETAPA 1: Conformidade ──
-        conformidade = await self.verificar_conformidade(
-            documentos=documentos,
-            type_process=tipo_processo,
+        return await self._post_with_retry(
+            "/ia/despacho",
+            json={"texto": texto_completo, "pendencias": pendencias_str}
         )
 
-        textos_extraidos = conformidade.get("textos_extraidos") or []
-        checklist_result = conformidade.get("checklist") or conformidade
+    async def analisar_processo(self, documentos: list[tuple[bytes, str]], tipo_processo: str) -> dict[str, Any]:
+        conformidade = await self.verificar_conformidade(documentos, tipo_processo)
+        textos = conformidade.get("textos_extraidos") or []
+        checklist = conformidade.get("checklist") or conformidade
 
-        # ── ETAPA 2: Resumo ──
-        resumo_response = await self.gerar_resumo(
-            tipo_processo=tipo_processo,
-            textos_extraidos=textos_extraidos,
-        )
+        resumo_resp = await self.gerar_resumo(tipo_processo, textos)
+        resumo_texto = self._extrair_texto(resumo_resp, ("resumo", "texto", "conteudo", "analise", "resultado"))
 
-        # Extrair a string do resumo
-        resumo_texto = self._extrair_resumo_texto(resumo_response)
-
-        # ── ETAPA 3: Despacho ──
-        despacho_response = await self.sugerir_despacho(
-            checklist_result=checklist_result,
-            resumo_texto=resumo_texto,
-            integridade_result=conformidade.get("integridade")
-        )
-
-        # Extrair corpo do despacho
-        despacho_texto = self._extrair_despacho_texto(despacho_response)
+        despacho_resp = await self.sugerir_despacho(checklist, resumo_texto, conformidade.get("integridade"))
+        despacho_texto = self._extrair_texto(despacho_resp, ("corpo_despacho", "despacho", "texto", "resultado"))
 
         return {
-            "checklist": checklist_result,
+            "checklist": checklist,
             "documentos_identificados": conformidade.get("documentos_identificados", []),
-            "textos_extraidos": textos_extraidos,
-            "resumo": resumo_texto,    # Sempre string
-            "despacho": despacho_texto, # Sempre string
-            "raw": {
-                "conformidade": conformidade,
-                "resumo": resumo_response,
-                "despacho": despacho_response,
-            },
+            "textos_extraidos": textos,
+            "resumo": resumo_texto,
+            "despacho": despacho_texto,
+            "raw": {"conformidade": conformidade, "resumo": resumo_resp, "despacho": despacho_resp},
         }
 
     @staticmethod
-    def _extrair_resumo_texto(resumo_response: Any) -> str:
-        """
-        Extrai uma STRING de resumo do retorno da API /ia/resumo.
-        Garante que o resultado final seja texto limpo, sem metadados JSON.
-        """
-        if isinstance(resumo_response, str):
-            res_str = resumo_response
-        elif not isinstance(resumo_response, dict):
-            res_str = str(resumo_response)
+    def _extrair_texto(response: Any, chaves: tuple[str, ...]) -> str:
+        """Função unificada para extrair o valor string mais provável de um objeto JSON aninhado."""
+        if isinstance(response, str):
+            res_str = response
+        elif not isinstance(response, dict):
+            res_str = str(response)
         else:
-            # É um dicionário, tenta navegar até o conteúdo real
-            resumo_inner = resumo_response.get("resumo", resumo_response)
-            if isinstance(resumo_inner, str):
-                res_str = resumo_inner
-            else:
-                resultado = resumo_inner.get("resultado", resumo_inner)
-                if isinstance(resultado, str):
-                    res_str = resultado
-                elif isinstance(resultado, dict):
-                    # Tenta pegar campos comuns de texto dentro do resultado
-                    for k in ["resumo", "texto", "conteudo", "analise"]:
-                        if isinstance(resultado.get(k), str):
-                            return resultado[k]
-                    res_str = json.dumps(resultado, ensure_ascii=False, indent=2)
-                else:
-                    res_str = json.dumps(resumo_response, ensure_ascii=False, indent=2)
+            res_str = None
+            # Busca direta no primeiro nível
+            for key in chaves:
+                if isinstance(response.get(key), str):
+                    res_str = response[key]
+                    break
+            
+            # Busca no segundo nível se houver sub-dicionários
+            if not res_str:
+                for val in response.values():
+                    if isinstance(val, dict):
+                        for key in chaves:
+                            if isinstance(val.get(key), str):
+                                res_str = val[key]
+                                break
+                    if res_str: break
+            
+            if not res_str:
+                res_str = json.dumps(response, ensure_ascii=False, indent=2)
 
-        # Limpeza final: se a string resultante ainda parecer um JSON stringificado
-        if res_str.strip().startswith("{") and res_str.strip().endswith("}"):
+        res_str = res_str.strip()
+        if res_str.startswith("{") and res_str.endswith("}"):
             try:
                 temp_obj = json.loads(res_str)
-                return RagClient._extrair_resumo_texto(temp_obj)
-            except:
+                return RagClient._extrair_texto(temp_obj, chaves)
+            except Exception:
                 pass
         
-        return res_str.strip()
-
-
-    @staticmethod
-    def _extrair_despacho_texto(despacho_response: Any) -> str:
-        """
-        Extrai uma STRING de despacho do retorno da API /ia/despacho.
-        Garante que o resultado final seja texto limpo, sem metadados JSON.
-        """
-        if isinstance(despacho_response, str):
-            res_str = despacho_response
-        elif not isinstance(despacho_response, dict):
-            res_str = str(despacho_response)
-        else:
-            # Tentar extrair de chaves conhecidas
-            for key in ("corpo_despacho", "despacho", "texto", "resultado"):
-                val = despacho_response.get(key)
-                if val and isinstance(val, str):
-                    return val.strip()
-                if val and isinstance(val, dict):
-                    return RagClient._extrair_despacho_texto(val)
-            
-            res_str = json.dumps(despacho_response, ensure_ascii=False, indent=2)
-
-        # Limpeza final: se a string resultante ainda parecer um JSON stringificado
-        if res_str.strip().startswith("{") and res_str.strip().endswith("}"):
-            try:
-                temp_obj = json.loads(res_str)
-                return RagClient._extrair_despacho_texto(temp_obj)
-            except:
-                pass
-
-        return res_str.strip()
-
+        return res_str
 
     async def close(self) -> None:
-        """Fecha cliente HTTP."""
         await self.client.aclose()
 
+
 async def get_rag_client() -> AsyncGenerator[RagClient, None]:
-    """
-    Dependency injection para RAGClient.
-    
-    Yields:
-        RAGClient: Cliente configurado.
-    """
     settings = get_settings()
-    client = RagClient(
-        base_url=settings.rag_service_url,
-        timeout=settings.rag_service_timeout,
-    )
+    client = RagClient(base_url=settings.rag_service_url, timeout=settings.rag_service_timeout)
     try:
         yield client
     finally:

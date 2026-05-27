@@ -1,5 +1,5 @@
-
 import os
+import asyncio
 from pathlib import Path
 from uuid import uuid4
 
@@ -176,8 +176,12 @@ class ProcessoService:
         """
 
         caminho = ProcessoService._get_upload_path(processo_id, tipo_doc)
-        with open(caminho, "wb") as f:
-            f.write(arquivo_bytes)
+        
+        def _write_file():
+            with open(caminho, "wb") as f:
+                f.write(arquivo_bytes)
+                
+        await asyncio.to_thread(_write_file)
         
         documento = Documento(
             processo_id=processo_id,
@@ -271,11 +275,16 @@ class ProcessoService:
             if not texto and documento.caminho_arquivo:
                 try:
                     caminho_arquivo = Path(documento.caminho_arquivo)
-                    if caminho_arquivo.exists():
-                        texto = caminho_arquivo.read_text(
-                            encoding="utf-8",
-                            errors="ignore",
-                        ).strip()
+                    # Verifica a existência e lê o arquivo em uma thread separada
+                    def _read_file():
+                        if caminho_arquivo.exists():
+                            return caminho_arquivo.read_text(
+                                encoding="utf-8",
+                                errors="ignore",
+                            ).strip()
+                        return ""
+                        
+                    texto = await asyncio.to_thread(_read_file)
                 except OSError:
                     texto = ""
 
@@ -283,6 +292,3 @@ class ProcessoService:
                 textos.append(f"[{documento.tipo_doc}]\n{texto}")
 
         return "\n\n".join(textos)
-    
-
-    

@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     
     rag_service_url: str = Field(
-        default="http://localhost:8001",
+        default="http://host.docker.internal:8001",
         alias="RAG_SERVICE_URL",
     )
 

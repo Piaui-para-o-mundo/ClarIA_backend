@@ -1,4 +1,3 @@
-
 from typing import Annotated
 from uuid import UUID
 import asyncio
@@ -90,7 +89,7 @@ async def listar_processos(
         limit=limit,
     )
 
-    return [ProcessoResumo.from_orm(p) for p in processos]
+    return [ProcessoResumo.model_validate(p) for p in processos]
 
 @router.get("/my", response_model=list[ProcessoResumo])
 async def list_my_processos(
@@ -119,7 +118,7 @@ async def list_my_processos(
         limit=limit,
     )
 
-    return [ProcessoResumo.from_orm(p) for p in processos]
+    return [ProcessoResumo.model_validate(p) for p in processos]
 
 @router.get("/{processo_id}", response_model=ProcessoResponse)
 async def get_processo(
@@ -415,4 +414,3 @@ async def iniciar_analise_processo(
         checklist_ia=processo.checklist_ia,
         despacho_automatico=processo.despacho_automatico,
     )
-
