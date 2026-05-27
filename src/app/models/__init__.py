@@ -4,6 +4,7 @@ Adicionar modelos SQLAlchemy ou entidades aqui.
 """
 
 from app.models.documento import Documento
+from app.models.notificacao import Notificacao
 from app.models.process import AnaliseStatusEnum, Process, Processo, StatusEnum
 from app.models.user import User
 
@@ -15,4 +16,5 @@ __all__ = [
 	"StatusEnum",
 	"AnaliseStatusEnum",
 	"Documento",
+	"Notificacao",
 ]
