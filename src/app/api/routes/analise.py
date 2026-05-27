@@ -1,8 +1,10 @@
-from typing import Annotated
+from typing import Annotated, Optional
 from uuid import UUID
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -12,6 +14,11 @@ from app.services.processo_service import ProcessoService
 
 router = APIRouter(prefix="/api/v1/analise", tags=["analise"])
 bearer_scheme = HTTPBearer()
+
+class AprovarDespachoRequest(BaseModel):
+    despacho_editado: str
+    assunto: Optional[str] = None
+    setor_destino: Optional[str] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -64,6 +71,15 @@ async def get_resultado_ia(
 
     # Para status finais ('completed' ou 'error') sempre retornar 200 com os dados,
     # deixando o frontend decidir como exibir (erro tratado como informação).
+    # Parseia o despacho se existir (pode ser JSON da IA ou texto legado)
+    import json as _json
+    despacho_raw = processo.despacho_automatico or ""
+    despacho_parsed = {}
+    try:
+        despacho_parsed = _json.loads(despacho_raw)
+    except (ValueError, TypeError):
+        pass
+
     return {
         "processo_id": str(processo.id),
         "numero": processo.numero,
@@ -72,7 +88,11 @@ async def get_resultado_ia(
         "analise_erro": processo.analise_erro,
         "resumo_ia": processo.resumo_ia,
         "checklist_ia": processo.checklist_ia,
-        "despacho_automatico": processo.despacho_automatico,
+        "despacho_automatico": despacho_parsed.get("corpo_despacho", despacho_raw),
+        "corpo_despacho": despacho_parsed.get("corpo_despacho", despacho_raw),
+        "setor_destino_sugerido": despacho_parsed.get("setor_destino_sugerido", "CPPD"),
+        "status_sugerido": despacho_parsed.get("status_sugerido", ""),
+        "assunto_despacho": despacho_parsed.get("assunto", ""),
     }
 
 
@@ -207,9 +227,21 @@ async def gerar_despacho(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Processo não encontrado.",
             )
+        # Parseia o JSON salvo para retornar campos estruturados ao frontend
+        import json as _json
+        despacho_raw = processo_atualizado.despacho_automatico or ""
+        try:
+            despacho_obj = _json.loads(despacho_raw)
+        except (ValueError, TypeError):
+            despacho_obj = {"corpo_despacho": despacho_raw}
+
         return {
             "processo_id": str(processo_atualizado.id),
-            "despacho_automatico": processo_atualizado.despacho_automatico,
+            "despacho_automatico": despacho_obj.get("corpo_despacho", despacho_raw),
+            "corpo_despacho": despacho_obj.get("corpo_despacho", despacho_raw),
+            "setor_destino_sugerido": despacho_obj.get("setor_destino_sugerido", "CPPD"),
+            "status_sugerido": despacho_obj.get("status_sugerido", ""),
+            "assunto": despacho_obj.get("assunto", ""),
         }
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -225,7 +257,7 @@ async def gerar_despacho(
 @router.post("/{processo_id}/aprovar-despacho")
 async def aprovar_despacho(
     processo_id: UUID,
-    despacho_editado: str,
+    payload: AprovarDespachoRequest,
     token: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
 ):
@@ -233,6 +265,7 @@ async def aprovar_despacho(
     Avaliador aprova ou edita o despacho. 
     Gera o PDF oficial e retorna o processo para o professor (PENDENTE_PROFESSOR).
     """
+    despacho_editado = payload.despacho_editado
     user = await get_current_user(token.credentials, db)
     if not user or getattr(user, "role", None) != "avaliador":
          raise HTTPException(status_code=403, detail="Apenas avaliadores podem assinar o despacho.")
@@ -245,29 +278,41 @@ async def aprovar_despacho(
     processo.despacho_avaliador = despacho_editado
 
     # 2. Gera o PDF Oficial (Papel Timbrado)
-    from pathlib import Path
-    from datetime import datetime
-    from fastapi.templating import Jinja2Templates
-    
-    template_dir = Path(__file__).resolve().parents[2] / "template"
-    templates = Jinja2Templates(directory=str(template_dir))
+    from app.api.routes.dispatch import _build_dispatch_context, _render_dispatch_html, _generate_pdf
+    import json as _json
     
     usuario = getattr(processo, 'usuario', None)
-    context = {
-        "processo_numero": processo.numero,
-        "setor_destino_sugerido": processo.setor_destino_sugerido,
-        "assunto": f"Despacho de Análise: {processo.tipo}",
-        "professor_nome": getattr(usuario, 'nome', 'N/A'),
-        "professor_setor": getattr(usuario, 'setor', 'N/A'),
-        "professor_matricula": getattr(usuario, 'matricula', 'N/A') if hasattr(usuario, 'matricula') else 'N/A',
-        "emitido_em": datetime.utcnow().strftime('%d/%m/%Y'),
-        "corpo_despacho": despacho_editado,
-        "numero_despacho": f"{datetime.now().year}/CPPD/{processo.numero.split('/')[-1] if '/' in processo.numero else '001'}"
-    }
+    
+    # Extrai dados da IA para preencher campos que o frontend não enviou
+    despacho_ia = {}
+    if processo.despacho_automatico:
+        try:
+            despacho_ia = _json.loads(processo.despacho_automatico)
+        except (ValueError, TypeError):
+            pass
+    
+    setor_destino = (
+        payload.setor_destino 
+        or despacho_ia.get("setor_destino_sugerido") 
+        or "CPPD"
+    )
+    assunto = (
+        payload.assunto 
+        or despacho_ia.get("assunto") 
+        or f"Despacho do Processo Nº {processo.numero}"
+    )
+    
+    context = _build_dispatch_context(
+        processo=processo,
+        setor_destino_sugerido=setor_destino,
+        assunto=f"DESPACHO DO PROCESSO Nº {processo.numero}",
+        corpo_despacho=despacho_editado,
+        numero_despacho=f"{datetime.now().year}/CPPD/{processo.numero.split('/')[-1] if '/' in processo.numero else '001'}",
+    )
+
     try:
-        html = templates.env.get_template("dispatch.html").render(context)
-        from weasyprint import HTML
-        pdf_bytes = HTML(string=html, base_url=str(template_dir)).write_pdf()
+        html = _render_dispatch_html(context)
+        pdf_bytes = _generate_pdf(html)
         
         # 3. Salva o PDF como documento oficial do processo
         await ProcessoService.save_documento(
