@@ -9,19 +9,20 @@ from app.schemas.documento import DocumentoResponse
 
 class ProcessoCreate(BaseModel):
     """Schema para criação de processo."""
+
     tipo: Literal[
-        "afastamento_pos_graduacao",
-        "afastamento_pos_doutorado",
-        "alteracao_regime_dedicacao_exclusiva",
-        "alteracao_regime_tp20h_para_ti40h",
-        "alteracao_regime_reducao",
-        "estagio_probatorio",
-        "licenca_capacitacao",
-        "licenca_premio",
-        "progressao_funcional",
-        "promocao_titulo",
-        "promocao_associado",
-        "promocao_titular"
+        'afastamento_pos_graduacao',
+        'afastamento_pos_doutorado',
+        'alteracao_regime_dedicacao_exclusiva',
+        'alteracao_regime_tp20h_para_ti40h',
+        'alteracao_regime_reducao',
+        'estagio_probatorio',
+        'licenca_capacitacao',
+        'licenca_premio',
+        'progressao_funcional',
+        'promocao_titulo',
+        'promocao_associado',
+        'promocao_titular',
     ]
 
 
@@ -36,7 +37,7 @@ class ProcessoResumo(BaseModel):
     criado_em: datetime
     atualizado_em: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {'from_attributes': True}
 
 
 class ProcessoResponse(BaseModel):
@@ -60,7 +61,7 @@ class ProcessoResponse(BaseModel):
     atualizado_em: datetime
     documentos: list[DocumentoResponse] = Field(default_factory=list)
 
-    model_config = {"from_attributes": True}
+    model_config = {'from_attributes': True}
 
 
 class AnaliseStatusResponse(BaseModel):
@@ -77,4 +78,4 @@ class AnaliseStatusResponse(BaseModel):
     checklist_ia: str | None = None
     despacho_automatico: str | None = None
 
-    model_config = {"from_attributes": True}
+    model_config = {'from_attributes': True}

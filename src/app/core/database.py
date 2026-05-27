@@ -1,4 +1,3 @@
-
 from typing import AsyncGenerator
 
 from sqlalchemy import inspect, text
@@ -11,6 +10,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import get_settings
 
+
 def get_engine() -> AsyncEngine:
     """
     Cria engine SQLAlchemy assincrono
@@ -18,7 +18,6 @@ def get_engine() -> AsyncEngine:
     Returns:
         AsyncEngine: Engine SQLAlchemy para conexões assíncronas.
     """
-
 
     settings = get_settings()
     return create_async_engine(
@@ -79,51 +78,54 @@ def _ensure_process_analysis_columns(sync_conn) -> None:
     """Adiciona colunas novas ao processo quando o schema já existe."""
 
     inspector = inspect(sync_conn)
-    if "processos" not in inspector.get_table_names():
+    if 'processos' not in inspector.get_table_names():
         return
 
-    existing_columns = {column["name"] for column in inspector.get_columns("processos")}
+    existing_columns = {
+        column['name'] for column in inspector.get_columns('processos')
+    }
     dialect_name = sync_conn.dialect.name
 
-    if dialect_name == "sqlite":
-        timestamp_type = "DATETIME"
+    if dialect_name == 'sqlite':
+        timestamp_type = 'DATETIME'
     else:
-        timestamp_type = "TIMESTAMP WITH TIME ZONE"
+        timestamp_type = 'TIMESTAMP WITH TIME ZONE'
 
     alter_statements = {
-        "analise_status": "ALTER TABLE processos ADD COLUMN analise_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
-        "analise_started_em": f"ALTER TABLE processos ADD COLUMN analise_started_em {timestamp_type}",
-        "analise_concluida_em": f"ALTER TABLE processos ADD COLUMN analise_concluida_em {timestamp_type}",
-        "analise_erro": "ALTER TABLE processos ADD COLUMN analise_erro TEXT",
-        "analise_log": "ALTER TABLE processos ADD COLUMN analise_log TEXT",
-        "resumo_ia": "ALTER TABLE processos ADD COLUMN resumo_ia TEXT",
-        "checklist_ia": "ALTER TABLE processos ADD COLUMN checklist_ia TEXT",
+        'analise_status': "ALTER TABLE processos ADD COLUMN analise_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+        'analise_started_em': f'ALTER TABLE processos ADD COLUMN analise_started_em {timestamp_type}',
+        'analise_concluida_em': f'ALTER TABLE processos ADD COLUMN analise_concluida_em {timestamp_type}',
+        'analise_erro': 'ALTER TABLE processos ADD COLUMN analise_erro TEXT',
+        'analise_log': 'ALTER TABLE processos ADD COLUMN analise_log TEXT',
+        'resumo_ia': 'ALTER TABLE processos ADD COLUMN resumo_ia TEXT',
+        'checklist_ia': 'ALTER TABLE processos ADD COLUMN checklist_ia TEXT',
     }
 
     for column_name, statement in alter_statements.items():
         if column_name not in existing_columns:
             sync_conn.execute(text(statement))
 
-    if "analise_status" in existing_columns and dialect_name == "postgresql":
+    if 'analise_status' in existing_columns and dialect_name == 'postgresql':
         sync_conn.execute(
             text(
-                "ALTER TABLE processos ALTER COLUMN analise_status "
-                "TYPE VARCHAR(20) USING analise_status::text"
+                'ALTER TABLE processos ALTER COLUMN analise_status '
+                'TYPE VARCHAR(20) USING analise_status::text'
             )
         )
         sync_conn.execute(
             text(
-                "UPDATE processos "
-                "SET analise_status = lower(analise_status) "
-                "WHERE analise_status IS NOT NULL"
+                'UPDATE processos '
+                'SET analise_status = lower(analise_status) '
+                'WHERE analise_status IS NOT NULL'
             )
         )
         sync_conn.execute(
             text(
-                "ALTER TABLE processos ALTER COLUMN analise_status "
+                'ALTER TABLE processos ALTER COLUMN analise_status '
                 "SET DEFAULT 'pending'"
             )
         )
+
 
 async def close_db() -> None:
     """
@@ -132,6 +134,7 @@ async def close_db() -> None:
     global _engine
     if _engine is not None:
         await _engine.dispose()
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
@@ -143,8 +146,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
     global _session_factory
     if not _session_factory:
-        raise RuntimeError("Database nao foi inicializada. Chame init_db() na startup.")
-    
+        raise RuntimeError(
+            'Database nao foi inicializada. Chame init_db() na startup.'
+        )
+
     async with _session_factory() as session:
         try:
             yield session
@@ -160,6 +165,7 @@ def get_session_factory_instance() -> async_sessionmaker:
     """Retorna a factory global de sessões já inicializada."""
     global _session_factory
     if not _session_factory:
-        raise RuntimeError("Database nao foi inicializada. Chame init_db() na startup.")
+        raise RuntimeError(
+            'Database nao foi inicializada. Chame init_db() na startup.'
+        )
     return _session_factory
-            

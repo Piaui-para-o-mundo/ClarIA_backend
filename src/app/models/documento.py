@@ -1,5 +1,3 @@
-
-
 from datetime import datetime
 from uuid import uuid4
 
@@ -24,7 +22,7 @@ class Documento(Base):
     Armazena informacoes metadados e conteudo de PDFs/arquivos.
     """
 
-    __tablename__ = "documentos"
+    __tablename__ = 'documentos'
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
@@ -34,7 +32,7 @@ class Documento(Base):
     )
     processo_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("processos.id", ondelete="CASCADE"),
+        ForeignKey('processos.id', ondelete='CASCADE'),
         nullable=False,
         index=True,
     )
@@ -59,9 +57,6 @@ class Documento(Base):
         nullable=False,
         server_default=func.now(),
     )
-    
+
     def __repr__(self) -> str:
-        return f"<Documento {self.nome_arquivo} ({self.tipo_doc})>"
-
-
-        
+        return f'<Documento {self.nome_arquivo} ({self.tipo_doc})>'

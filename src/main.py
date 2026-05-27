@@ -23,10 +23,13 @@ def _sanitize_validation_payload(value: Any) -> Any:
     """Remove bytes brutos de erros de validação antes de serializar a resposta."""
 
     if isinstance(value, (bytes, bytearray, memoryview)):
-        return "<binary payload omitted>"
+        return '<binary payload omitted>'
 
     if isinstance(value, dict):
-        return {key: _sanitize_validation_payload(item) for key, item in value.items()}
+        return {
+            key: _sanitize_validation_payload(item)
+            for key, item in value.items()
+        }
 
     if isinstance(value, list):
         return [_sanitize_validation_payload(item) for item in value]
@@ -50,6 +53,7 @@ async def lifespan(app: FastAPI):
     yield
     await close_db()
 
+
 def create_app() -> FastAPI:
     """
     Factory para criar a aplicação FastAPI.
@@ -59,61 +63,64 @@ def create_app() -> FastAPI:
     """
 
     settings = get_settings()
-    uploads_dir = Path("uploads")
+    uploads_dir = Path('uploads')
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
     app = FastAPI(
-        title="ClarIA Backend",
-        description="Backend do Sistema ClarIA - Analise de Processos",
-        version="1.0.0",
+        title='ClarIA Backend',
+        description='Backend do Sistema ClarIA - Analise de Processos',
+        version='1.0.0',
         lifespan=lifespan,
     )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ):
         """Evita que erros de validação exponham corpos binários na resposta 422."""
 
         del request
         detail = _sanitize_validation_payload(jsonable_encoder(exc.errors()))
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={"detail": detail},
+            content={'detail': detail},
         )
 
     # Configuração de CORS
     # Nota: allow_origins=["*"] não pode ser usado com allow_credentials=True
-    if settings.environment == "development":
+    if settings.environment == 'development':
         origins = [
-            "http://localhost:5173",
-            "http://localhost:3000",
-            "http://localhost:8002",
-            "http://localhost:8001",
-            "http://127.0.0.1:8002",
-            "http://0.0.0.0:8002",
-            "http://0.0.0.0:8001",
-            "http://0.0.0.0:5000",
-            "http://0.0.0.0:5500",
-
+            'http://localhost:5173',
+            'http://localhost:3000',
+            'http://localhost:8002',
+            'http://localhost:8001',
+            'http://127.0.0.1:8002',
+            'http://0.0.0.0:8002',
+            'http://0.0.0.0:8001',
+            'http://0.0.0.0:5000',
+            'http://0.0.0.0:5500',
         ]
         allow_credentials = True
     else:
-        origins = ["*"]
+        origins = ['*']
         allow_credentials = False
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=allow_credentials,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=['*'],
+        allow_headers=['*'],
     )
 
-    @app.get("/health")
+    @app.get('/health')
     async def health_check():
-        """Health check endpoint. """
-        return {"status": "ok", "environment": settings.environment}
+        """Health check endpoint."""
+        return {'status': 'ok', 'environment': settings.environment}
 
-    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+    app.mount(
+        '/uploads', StaticFiles(directory=str(uploads_dir)), name='uploads'
+    )
 
     app.include_router(auth.router)
     app.include_router(processos.router)
@@ -123,13 +130,15 @@ def create_app() -> FastAPI:
 
     return app
 
+
 app = create_app()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import uvicorn
+
     uvicorn.run(
-        "src.main:app",
-        host="0.0.0.0",
+        'src.main:app',
+        host='0.0.0.0',
         port=8000,
         reload=True,
     )

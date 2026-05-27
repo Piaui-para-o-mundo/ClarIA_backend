@@ -6,6 +6,7 @@ import app.core.database as _db
 async def _noop():
     return None
 
+
 _db.init_db = _noop
 _db.close_db = _noop
 
@@ -16,7 +17,7 @@ client = TestClient(app)
 
 
 def test_health_endpoint():
-    r = client.get("/health")
+    r = client.get('/health')
     assert r.status_code == 200
     payload = r.json()
-    assert payload.get("status") == "ok"
+    assert payload.get('status') == 'ok'

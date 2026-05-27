@@ -1,2 +1,2 @@
 """Pacote `api` - inicializador."""
-__all__ = ["routes", "router"]
+__all__ = ['routes', 'router']

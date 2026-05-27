@@ -17,7 +17,7 @@ from app.services.rag_service import RagClient
 class ProcessoService:
     """Serviço para operacoes de processos."""
 
-    UPLOAD_DIR = Path("uploads")
+    UPLOAD_DIR = Path('uploads')
 
     @classmethod
     def _get_upload_path(cls, processo_id: str, tipo_doc: str) -> Path:
@@ -27,8 +27,8 @@ class ProcessoService:
         Args:
             processo_id (str): ID do processo
             tipo_doc: Tipo de documento.
-        
-        Returns: 
+
+        Returns:
             Path: Path relativo do arquivo.
         """
 
@@ -36,12 +36,14 @@ class ProcessoService:
         dir_path.mkdir(parents=True, exist_ok=True)
 
         timestamp = uuid4().hex[:8]
-        filename = f"{tipo_doc}_{timestamp}.pdf"
+        filename = f'{tipo_doc}_{timestamp}.pdf'
 
         return dir_path / filename
-    
+
     @staticmethod
-    async def criar_processo(db: AsyncSession, user: User, tipo: str) -> Processo:
+    async def criar_processo(
+        db: AsyncSession, user: User, tipo: str
+    ) -> Processo:
         """
         Cria novo processo
 
@@ -60,14 +62,14 @@ class ProcessoService:
         # Gera numero unico: CPPD-XXXX/2026
         # Em producao, usar sequence do DB ou service dedicado
 
-        numero = f"CPPD-{uuid4().hex[:3].upper()}/{2026}"
+        numero = f'CPPD-{uuid4().hex[:3].upper()}/{2026}'
 
         processo = Processo(
             numero=numero,
             usuario_id=user.id,
             tipo=tipo,
             status=StatusEnum.AGUARDANDO_DOCUMENTOS,
-            analise_status="pending",
+            analise_status='pending',
         )
 
         db.add(processo)
@@ -83,12 +85,12 @@ class ProcessoService:
     ) -> list[Processo]:
         """
         Lista todos os processos (para avaliador).
-        
+
         Args:
             db: Session de banco.
             skip: Offset de paginação.
             limit: Limite de resultados.
-            
+
         Returns:
             list[Processo]: Processos paginados.
         """
@@ -104,20 +106,20 @@ class ProcessoService:
 
     @staticmethod
     async def listar_processos_user(
-         db: AsyncSession,
+        db: AsyncSession,
         usuario_id: str,
         skip: int = 0,
         limit: int = 50,
     ) -> list[Processo]:
         """
         Lista processos do usuário (professor).
-        
+
         Args:
             db: Session de banco.
             usuario_id: ID do usuário.
             skip: Offset de paginação.
             limit: Limite de resultados.
-            
+
         Returns:
             list[Processo]: Processos do usuário.
         """
@@ -135,7 +137,7 @@ class ProcessoService:
     async def get_processo(
         db: AsyncSession,
         processo_id: str,
-    ) -> Processo | None    :
+    ) -> Processo | None:
         """
         Retorna processo por ID, com documentos relacionados.
 
@@ -152,7 +154,6 @@ class ProcessoService:
         result = await db.execute(stmt)
         return result.scalars().first()
 
-    
     @staticmethod
     async def save_documento(
         db: AsyncSession,
@@ -176,13 +177,13 @@ class ProcessoService:
         """
 
         caminho = ProcessoService._get_upload_path(processo_id, tipo_doc)
-        
+
         def _write_file():
-            with open(caminho, "wb") as f:
+            with open(caminho, 'wb') as f:
                 f.write(arquivo_bytes)
-                
+
         await asyncio.to_thread(_write_file)
-        
+
         documento = Documento(
             processo_id=processo_id,
             nome_arquivo=name_arquivo,
@@ -194,7 +195,6 @@ class ProcessoService:
         await db.flush()
         return documento
 
-    
     @staticmethod
     async def update_status(
         db: AsyncSession,
@@ -203,12 +203,12 @@ class ProcessoService:
     ) -> Processo | None:
         """
         Atualiza status do processo.
-        
+
         Args:
             db: Session de banco.
             processo_id: ID do processo.
             novo_status: Novo status.
-            
+
         Returns:
             Processo | None: Processo atualizado.
         """
@@ -220,9 +220,9 @@ class ProcessoService:
         if processo:
             processo.status = novo_status
             await db.flush()
-        
+
         return processo
-    
+
     @staticmethod
     async def save_despacho_automatico(
         db: AsyncSession,
@@ -245,7 +245,7 @@ class ProcessoService:
         if processo:
             processo.despacho_automatico = despacho
             await db.flush()
-        
+
         return processo
 
     @staticmethod
@@ -267,10 +267,10 @@ class ProcessoService:
         stmt = select(Documento).where(Documento.processo_id == processo_id)
         result = await db.execute(stmt)
         documentos = result.scalars().all()
-        
+
         textos: list[str] = []
         for documento in documentos:
-            texto = documento.conteudo_extraido or ""
+            texto = documento.conteudo_extraido or ''
 
             if not texto and documento.caminho_arquivo:
                 try:
@@ -279,16 +279,16 @@ class ProcessoService:
                     def _read_file():
                         if caminho_arquivo.exists():
                             return caminho_arquivo.read_text(
-                                encoding="utf-8",
-                                errors="ignore",
+                                encoding='utf-8',
+                                errors='ignore',
                             ).strip()
-                        return ""
-                        
+                        return ''
+
                     texto = await asyncio.to_thread(_read_file)
                 except OSError:
-                    texto = ""
+                    texto = ''
 
             if texto:
-                textos.append(f"[{documento.tipo_doc}]\n{texto}")
+                textos.append(f'[{documento.tipo_doc}]\n{texto}')
 
-        return "\n\n".join(textos)
+        return '\n\n'.join(textos)

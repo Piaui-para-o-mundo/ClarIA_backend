@@ -1,5 +1,3 @@
-
-
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -11,10 +9,8 @@ from app.models.user import User
 from app.schemas.auth import TokenPayload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-async def get_current_user(
-    token: str,
-    db: AsyncSession
-) -> User:
+
+async def get_current_user(token: str, db: AsyncSession) -> User:
     """
     Dependency que valida JWT e retorna usuario logado.
 
@@ -22,7 +18,7 @@ async def get_current_user(
         token: JWT extraido do header Authorization.
         db: Sessao do banco.
 
-    Returns: 
+    Returns:
         Usuario: Usuario logado.
 
     Raises:
@@ -31,28 +27,29 @@ async def get_current_user(
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Nao foi possivel validar as credenciais",
-        headers={"WWW-Authenticate": "Bearer"},
+        detail='Nao foi possivel validar as credenciais',
+        headers={'WWW-Authenticate': 'Bearer'},
     )
 
     try:
         payload = decode_token(token)
-        user_id: str | None = payload.get("sub")
+        user_id: str | None = payload.get('sub')
         if user_id is None:
             raise credentials_exception
         token_data = TokenPayload(sub=user_id)
     except JWTError:
         raise credentials_exception
-    
 
     from sqlalchemy import select
+
     result = await db.execute(select(User).where(User.id == token_data.sub))
     user = result.scalars().first()
 
     if user is None:
         raise credentials_exception
-    
+
     return user
+
 
 def get_current_active_user(*allowed_roles: str):
     """
@@ -63,7 +60,7 @@ def get_current_active_user(*allowed_roles: str):
 
     Returns:
         Callable: Dependency que poder ser usado em rotas.
-    
+
     raises:
         HTTPException: Se usuario nao tem role permitido.
     """
@@ -77,8 +74,8 @@ def get_current_active_user(*allowed_roles: str):
                 detail=f"Acesso negado: Roles permitidas: {', '.join(allowed_roles)}",
             )
         return current_user
+
     return role_checker
 
 
 require_role = get_current_active_user
-    

@@ -16,13 +16,14 @@ API robusta em **FastAPI** com PostgreSQL para processamento inteligente de docu
 3. [Solução Proposta](#solucao-proposta)
 4. [Tecnologias e Justificativa](#tecnologias-e-justificativa)
 5. [Arquitetura](#arquitetura)
-6. [Endpoints](#endpoints)
-7. [Como Rodar Localmente](#como-rodar-localmente)
-8. [Equipe](#equipe)
-9. [Frontend](#frontend)
-10. [RAG (Retrieval-Augmented Generation)](#rag-retrieval-augmented-generation)
-11. [Recursos Adicionais](#recursos-adicionais)
-12. [Licença](#licenca)
+6. [Fluxo de Comunicação](#fluxo-de-comunicação)
+7. [Endpoints](#endpoints)
+8. [Como Rodar Localmente](#como-rodar-localmente)
+9. [Equipe](#equipe)
+10. [Frontend](#frontend)
+11. [RAG (Retrieval-Augmented Generation)](#rag-retrieval-augmented-generation)
+12. [Recursos Adicionais](#recursos-adicionais)
+13. [Licença](#licenca)
 
 ---
 
@@ -249,6 +250,39 @@ ClarIA_backend/
 | **Models** | Representação de dados no banco (ORM) | User, Processo, Documento com relacionamentos |
 | **Schemas** | Validação e serialização de dados (Pydantic) | UserCreate, ProcessoResponse |
 | **Core** | Configuração, conexão, segurança, dependências globais | JWT, pool de DB, variáveis de ambiente |
+
+<a id="fluxo-de-comunicação"></a>
+
+---
+
+## 🔄 Fluxo de Comunicação
+
+### Arquitetura em Camadas: Frontend ↔ Backend ↔ RAG AI
+
+O ClarIA implementa uma arquitetura de três camadas que trabalham em harmonia para processamento inteligente de documentos. A comunicação é estruturada, documentada e segura através de tokens JWT.
+
+```mermaid
+graph TB
+    FE["🎨 Frontend<br/>(React/Vue/HTML)"]
+    BE["⚙️ Backend FastAPI<br/>(API REST)"]
+    DB["🗄️ PostgreSQL<br/>(Base de Dados)"]
+    RAG["🤖 RAG AI Service<br/>(LLM + Vector DB)"]
+    Storage["📦 Storage<br/>(Documentos)"]
+
+    FE -->|HTTP/JSON + JWT| BE
+    BE -->|SQL Queries| DB
+    BE -->|HTTP/JSON| RAG
+    BE -->|Arquivo| Storage
+    BE -->|Retorna Resultado| FE
+    RAG -->|Análise| BE
+    
+    style FE fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    style BE fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style DB fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style RAG fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style Storage fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+```
+
 
 <a id="endpoints"></a>
 
