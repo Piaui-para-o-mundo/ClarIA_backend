@@ -18,33 +18,20 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # =========================================================================
-    # Aplicação
-    # =========================================================================
-
+   
     app_name: str = "ClarIA"
 
-    # =========================================================================
-    # PostgreSQL
-    # =========================================================================
-
+    
     postgres_user: str | None = Field(default=None, alias="POSTGRES_USER")
     postgres_password: str | None = Field(default=None, alias="POSTGRES_PASSWORD")
     postgres_db: str | None = Field(default=None, alias="POSTGRES_DB")
 
     database_url: str = Field(alias="DATABASE_URL")
 
-    # =========================================================================
-    # API
-    # =========================================================================
-
     api_port: int = Field(default=8000, alias="API_PORT")
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
 
-    # =========================================================================
-    # Segurança
-    # =========================================================================
-
+   
     secret_key: str = Field(alias="SECRET_KEY")
 
     algorithm: str = Field(
@@ -57,10 +44,7 @@ class Settings(BaseSettings):
         alias="ACCESS_TOKEN_EXPIRE_MINUTES",
     )
 
-    # =========================================================================
-    # Serviços
-    # =========================================================================
-
+    
     rag_service_url: str = Field(
         default="http://localhost:8001",
         alias="RAG_SERVICE_URL",
@@ -70,10 +54,6 @@ class Settings(BaseSettings):
         default=120,
         alias="RAG_SERVICE_TIMEOUT",
     )
-
-    # =========================================================================
-    # Ambiente
-    # =========================================================================
 
     environment: Literal["development", "staging", "production"] = Field(
         default="development",
